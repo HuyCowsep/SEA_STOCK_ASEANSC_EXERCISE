@@ -30,7 +30,7 @@ const LoginModal = forwardRef<LoginModalHandle, LoginModalProps>(({ setToken }, 
   const [loading, setLoading] = useState(false);
 
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
-  const [lang, setLang] = useState("Ti?ng Vi?t");
+  const [lang, setLang] = useState("Tiếng Việt");
   const dropdownCloseTimerRef = useRef<number | null>(null);
 
   const [qrOpen, setQrOpen] = useState(false);
@@ -116,7 +116,7 @@ const LoginModal = forwardRef<LoginModalHandle, LoginModalProps>(({ setToken }, 
     e.preventDefault();
 
     if (!username || !password) {
-      pushToast("Thi?u th�ng tin", "Vui l�ng di?n t�n t�i kho?n v� m?t kh?u", "error");
+      pushToast("Thiếu thông tin", "Vui lòng điền tên tài khoản và mật khẩu", "error");
       return;
     }
 
@@ -127,15 +127,15 @@ const LoginModal = forwardRef<LoginModalHandle, LoginModalProps>(({ setToken }, 
       localStorage.setItem("token", token);
       localStorage.setItem("username", username);
       setToken(token);
-      pushToast("�ang nh?p th�nh c�ng", "B?n d� dang nh?p v�o h? th?ng", "success");
+      pushToast("Đăng nhập thành công", "Bạn đã đăng nhập vào hệ thống", "success");
       closeModal();
       setUsername("");
       setPassword("");
     } catch (err) {
       if (axios.isAxiosError(err) && err.response) {
-        pushToast("�ang nh?p th?t b?i", err.response.data.message || "T�i kho?n ho?c m?t kh?u kh�ng d�ng", "error");
+        pushToast("Đăng nhập thất bại", err.response.data.message || "Tài khoản hoặc mật khẩu không đúng", "error");
       } else {
-        pushToast("L?i k?t n?i", "Kh�ng th? k?t n?i t?i server", "error");
+        pushToast("Lỗi kết nối", "Không thể kết nối tới server", "error");
       }
     } finally {
       setLoading(false);
@@ -145,10 +145,7 @@ const LoginModal = forwardRef<LoginModalHandle, LoginModalProps>(({ setToken }, 
   return (
     <>
       {isOpen && (
-        <div
-          className={styles.overlay}
-          // onClick={(e) => e.target === e.currentTarget && closeModal()}
-        >
+        <div className={styles.overlay}>
           <div className={styles.modal}>
             <div className={styles.left}>
               <img src={images[currentIndex]} alt="banner" className={styles.banner} />
@@ -162,36 +159,36 @@ const LoginModal = forwardRef<LoginModalHandle, LoginModalProps>(({ setToken }, 
               ) : (
                 <>
                   <div className={styles.right_1}>
-                    <h2 className={styles.title}>�ang nh?p</h2>
+                    <h2 className={styles.title}>Đăng nhập</h2>
                   </div>
 
                   <form className={styles.form} onSubmit={handleLogin}>
                     <div className={styles.inputGroup}>
-                      <h3>Username</h3>
-                      <input type="text" placeholder="Vui l�ng nh?p username" value={username} onChange={(e) => setUsername(e.target.value)} />
+                      <h3>Tên đăng nhập</h3>
+                      <input type="text" placeholder="Vui lòng nhập username" value={username} onChange={(e) => setUsername(e.target.value)} />
                     </div>
 
                     <div className={styles.inputGroup}>
-                      <h3>M?t kh?u</h3>
-                      <input type="password" placeholder="Vui l�ng nh?p m?t kh?u" value={password} onChange={(e) => setPassword(e.target.value)} />
+                      <h3>Mật khẩu</h3>
+                      <input type="password" placeholder="Vui lòng nhập mật khẩu" value={password} onChange={(e) => setPassword(e.target.value)} />
                     </div>
 
                     <div className={styles.forgotPassword}>
                       <button type="button" onClick={() => setView("forgot")}>
-                        Qu�n m?t kh?u?
+                        Quên mật khẩu?
                       </button>
                     </div>
 
                     <button type="submit" className={styles.buttonLogin} disabled={loading}>
-                      {loading ? "�ang x? l�..." : "�ang nh?p"}
+                      {loading ? "Đang xử lý..." : "Đăng nhập"}
                     </button>
 
                     <div className={styles.divider}>
-                      <span>ho?c dang nh?p nhanh b?ng QR code</span>
+                      <span>hoặc đăng nhập nhanh bằng QR code</span>
                     </div>
 
                     <div className={styles.qrLogin}>
-                      <button type="button" className={styles.qrBtn} onClick={() => setQrOpen(true)} title="�ang nh?p b?ng QR">
+                      <button type="button" className={styles.qrBtn} onClick={() => setQrOpen(true)} title="Đăng nhập bằng QR">
                         <span className={styles.qrIcon}>
                           <svg viewBox="0 0 24 24" width="40" height="40" fill="currentColor">
                             <path d="M3 3h8v8H3V3zm2 2v4h4V5H5zm10-2h6v6h-6V3zm2 2v2h2V5h-2zM3 13h8v8H3v-8zm2 2v4h4v-4H5zm12-2h2v2h-2v-2zm0 4h2v4h-4v-2h2v-2zM13 13h2v2h-2v-2z" />
@@ -203,28 +200,27 @@ const LoginModal = forwardRef<LoginModalHandle, LoginModalProps>(({ setToken }, 
                     {qrOpen && (
                       <div className={styles.qrOverlay} onClick={() => setQrOpen(false)}>
                         <div className={styles.qrModal} onClick={(e) => e.stopPropagation()}>
-                          <h3>�ang nh?p</h3>
+                          <h3>Đăng nhập</h3>
                           <div className={styles.qrBox}>
                             <img src={qrSrc} alt="qr" />
                             {qrExpired && (
                               <div className={styles.qrOverlayReload}>
-                                <button onClick={handleReloadQR}>T?i l?i m� QR</button>
+                                <button onClick={handleReloadQR}>Tải lại mã QR</button>
                               </div>
                             )}
                           </div>
-                          <p>Qu�t m� QR b?ng ?ng d?ng SeaStock</p>
+                          <p>Quét mã QR bằng ứng dụng SeaStock</p>
                           <button className={styles.qrCloseBtn} onClick={() => setQrOpen(false)}>
-                            ��ng
+                            Đóng
                           </button>
                         </div>
                       </div>
                     )}
 
                     <div className={styles.dontHaveAccount}>
-                      <p className={styles.text}>Qu� kh�ch chua c� t�i kho?n?</p>
-
+                      <p className={styles.text}>Quý khách chưa có tài khoản?</p>
                       <button type="button" className={styles.openAccountBtn} onClick={() => setView("openAccount")}>
-                        M? t�i kho?n
+                        Mở tài khoản
                       </button>
                     </div>
 
@@ -237,42 +233,22 @@ const LoginModal = forwardRef<LoginModalHandle, LoginModalProps>(({ setToken }, 
                         onMouseLeave={() => closeDropdownWithDelay("menu")}
                       >
                         <button type="button" className={styles.dropdownBtn}>
-                          �i?u kho?n v� li�n h? <FiChevronDown />
+                          Điều khoản và liên hệ <FiChevronDown />
                         </button>
 
                         {openDropdown === "menu" && (
                           <div className={`${styles.dropdownMenu} ${styles.menuPrimary}`}>
-                            <a
-                              href="https://www.aseansc.com.vn/policy/dieu-khoan-dich-vu-aseansc.pdf"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => setOpenDropdown(null)}
-                            >
-                              <FiFileText /> �i?u kho?n v� d?ch v?
+                            <a href="https://www.aseansc.com.vn/policy/dieu-khoan-dich-vu-aseansc.pdf" target="_blank" rel="noopener noreferrer">
+                              <FiFileText /> Điều khoản và dịch vụ
                             </a>
-                            <a
-                              href="https://www.aseansc.com.vn/policy/cong-bo-rui-ro-aseansc.pdf"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => setOpenDropdown(null)}
-                            >
-                              <FiAlertTriangle /> C�ng b? r?i ro
+                            <a href="https://www.aseansc.com.vn/policy/cong-bo-rui-ro-aseansc.pdf" target="_blank" rel="noopener noreferrer">
+                              <FiAlertTriangle /> Công bố rủi ro
                             </a>
-                            <a
-                              href="https://www.aseansc.com.vn/help/huong-dan-su-dung-seastock-web.pdf"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => setOpenDropdown(null)}
-                            >
-                              <FiVolume /> Hu?ng d?n s? d?ng
+                            <a href="https://www.aseansc.com.vn/help/huong-dan-su-dung-seastock-web.pdf" target="_blank" rel="noopener noreferrer">
+                              <FiVolume /> Hướng dẫn sử dụng
                             </a>
-                            <a
-                              href="https://www.aseansc.com.vn/lien-he/"
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={() => setOpenDropdown(null)}
-                            >
-                              <FiAtSign /> Li�n h? AseanSC
+                            <a href="https://www.aseansc.com.vn/lien-he/" target="_blank" rel="noopener noreferrer">
+                              <FiAtSign /> Liên hệ AseanSC
                             </a>
                           </div>
                         )}
@@ -290,7 +266,7 @@ const LoginModal = forwardRef<LoginModalHandle, LoginModalProps>(({ setToken }, 
 
                         {openDropdown === "lang" && (
                           <div className={`${styles.dropdownMenu} ${styles.menuLang}`}>
-                            <div onClick={() => setLang("Ti?ng Vi?t")}>Ti?ng Vi?t {lang === "Ti?ng Vi?t" && <FiCheck />}</div>
+                            <div onClick={() => setLang("Tiếng Việt")}>Tiếng Việt {lang === "Tiếng Việt" && <FiCheck />}</div>
                             <div onClick={() => setLang("English")}>English {lang === "English" && <FiCheck />}</div>
                           </div>
                         )}
@@ -301,7 +277,7 @@ const LoginModal = forwardRef<LoginModalHandle, LoginModalProps>(({ setToken }, 
               )}
             </div>
 
-            <button className={styles.closeBtn} onClick={closeModal} aria-label="��ng modal" title="Nh?n d? d�ng ho?c nh?n ESC">
+            <button className={styles.closeBtn} onClick={closeModal} aria-label="Đóng modal" title="Nhấn để đóng hoặc nhấn ESC">
               <FiX />
             </button>
           </div>
@@ -315,4 +291,3 @@ const LoginModal = forwardRef<LoginModalHandle, LoginModalProps>(({ setToken }, 
 
 LoginModal.displayName = "LoginModal";
 export default LoginModal;
-
