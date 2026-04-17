@@ -1,4 +1,4 @@
-//src/pages/Dashboard.tsx
+﻿// src/pages/Dashboard.tsx
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import axios from "axios";
 import Header from "../components/Header";
@@ -9,6 +9,8 @@ import StockTable from "../components/StockTable";
 import type { StockTableHandle } from "../components/StockTable";
 import OrderBook from "../components/OrderBook";
 import OrderModal from "../modals/OrderModal";
+import { useToast } from "../utils/useToast";
+import ToastContainer from "../utils/ToastContainer";
 import socket from "../websocket/client";
 import { setCurrentExchange } from "../websocket/client";
 import { DEFAULT_COLUMN_VISIBILITY } from "../types/tableConfig";
@@ -106,10 +108,12 @@ const hasDeltaChange = (oldInst: Instrument, delta: Instrument) => {
   }
   return false;
 };
+
 // Regex chứng quyền: C + [mã cổ phiếu cơ sở 3+ chữ] + [số 2+ chữ số]
 const CW_REGEX = /^C[A-Z]{3,}\d{2,}/;
 // Regex ETF: bắt đầu bằng E1 hoặc FU
 const ETF_REGEX = /^(E1|FU)/;
+const VND_FORMATTER = new Intl.NumberFormat("vi-VN");
 
 const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, currentLanguage }: Props) => {
   const [instruments, setInstruments] = useState<Instrument[]>([]);
@@ -141,6 +145,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   const [loading, setLoading] = useState(true);
   const [unitSettings, setUnitSettings] = useState<UnitSettings>({ volume: 1, price: 1000, value: 1000000 });
   const [columnVisibility, setColumnVisibility] = useState<ColumnVisibility>(DEFAULT_COLUMN_VISIBILITY);
+  const { toasts, pushToast, removeToast } = useToast();
 
   // Ref tới StockTable để lấy scroll container cho chế độ trình chiếu
   const stockTableRef = useRef<StockTableHandle>(null);
@@ -168,7 +173,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
       const nextAvailable = typeof res.data?.available === "number" ? res.data.available : 0;
       setAvailableBalance(nextAvailable);
     } catch (err) {
-      console.error("Loi tai so du kha dung:", err);
+      console.error("Lỗi tải số dư khả dụng:", err);
     }
   }, [token]);
 
@@ -238,9 +243,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
         const res = await axios.get("/api/orders", {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const apiOrders: Record<string, unknown>[] = Array.isArray(res.data?.orders)
-          ? (res.data.orders as Record<string, unknown>[])
-          : [];
+        const apiOrders: Record<string, unknown>[] = Array.isArray(res.data?.orders) ? (res.data.orders as Record<string, unknown>[]) : [];
 
         const mapped: Order[] = apiOrders.map((o) => ({
           id: String((o.id as string) ?? (o._id as string) ?? ""),
@@ -266,6 +269,8 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
 
   // Lắng nghe order_update từ socket
   useEffect(() => {
+    const formatVnd = (val: number) => `${VND_FORMATTER.format(val)} VND`;
+
     const handleOrderUpdate = (payload: OrderUpdatePayload) => {
       if (!orderIdsRef.current.has(payload.orderId)) return;
       setOrders((prev) => {
@@ -283,6 +288,32 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
         return next;
       });
 
+      const cashIn = payload.cashIn ?? 0;
+      const cashOut = payload.cashOut ?? 0;
+      const fee = payload.fee ?? 0;
+      const refund = payload.refund ?? 0;
+      const matchedQtyDelta = payload.matchedQtyDelta ?? 0;
+      const hasSettlementData = cashIn > 0 || cashOut > 0 || fee > 0 || refund > 0;
+
+      if (hasSettlementData && (payload.status === "matched" || payload.status === "partial")) {
+        if (payload.side === "buy") {
+          const parts: string[] = [];
+          if (cashOut > 0) parts.push(`Trừ -${formatVnd(cashOut)}`);
+          if (refund > 0) parts.push(`Hoàn +${formatVnd(refund)}`);
+          if (fee > 0) parts.push(`Phí sàn -${formatVnd(fee)}`);
+          if (matchedQtyDelta > 0) parts.push(`Nhận +${VND_FORMATTER.format(matchedQtyDelta)} cổ phiếu ${payload.symbol}`);
+
+          pushToast(`Khớp lệnh mua ${payload.symbol}`, parts.join(" | "), "error");
+        } else if (payload.side === "sell") {
+          const parts: string[] = [];
+          if (cashIn > 0) parts.push(`Cộng +${formatVnd(cashIn)}`);
+          if (fee > 0) parts.push(`Phí sàn -${formatVnd(fee)}`);
+          if (matchedQtyDelta > 0) parts.push(`Bán -${VND_FORMATTER.format(matchedQtyDelta)} cổ phiếu ${payload.symbol}`);
+
+          pushToast(`Khớp lệnh bán ${payload.symbol}`, parts.join(" | "), "success");
+        }
+      }
+
       void fetchAvailableBalance();
     };
 
@@ -290,7 +321,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     return () => {
       socket.off("order_update", handleOrderUpdate);
     };
-  }, [fetchAvailableBalance]);
+  }, [fetchAvailableBalance, pushToast]);
 
   // Handler: mở OrderModal khi click M/B trên bảng giá
   const handleOrderClick = useCallback(
@@ -314,16 +345,23 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   );
 
   // Handler: sau khi đặt lệnh thành công
-  const handleOrderSuccess = useCallback((order: Order) => {
-    setOrders((prev) => [order, ...prev]);
-    void fetchAvailableBalance();
-  }, [fetchAvailableBalance]);
+  const handleOrderSuccess = useCallback(
+    (order: Order) => {
+      setOrders((prev) => [order, ...prev]);
+      void fetchAvailableBalance();
+    },
+    [fetchAvailableBalance],
+  );
 
   // Handler: hủy lệnh (OrderBook đã gọi API rồi, chỉ cần update state)
-  const handleCancelOrder = useCallback((id: string) => {
-    setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "cancelled" as const } : o)));
-    void fetchAvailableBalance();
-  }, [fetchAvailableBalance]);
+  const handleCancelOrder = useCallback(
+    (id: string) => {
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "cancelled" as const } : o)));
+      void fetchAvailableBalance();
+    },
+    [fetchAvailableBalance],
+  );
+
   // Ref lưu exchange hiện tại để re-subscribe khi reconnect
   const exchangeRef = useRef(selectedExchange);
   exchangeRef.current = selectedExchange;
@@ -337,12 +375,6 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   // Lắng nghe instruments_data từ backend (snapshot hoặc delta)
   useEffect(() => {
     const handleInstrumentsData = (data: RealtimeDataResponse & { _serverEmitTime?: number }) => {
-      // Đo delay
-      // if (data._serverEmitTime) {
-      //   const delay = Date.now() - data._serverEmitTime;
-      //   console.log(`⏱️ Socket delay: ${delay}ms | type=${data._type} | items=${data.d?.length}`);
-      // }
-
       if (!data || !data.d || !Array.isArray(data.d)) return;
 
       // Lần đầu nhận data → tắt loading
@@ -512,7 +544,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     fetchCategoryInstruments();
   }, [selectedCategory, industryMap, selectedExchange]);
 
-  //chế độ trình chiếu — scroll phần data của bảng
+  // Chế độ trình chiếu — scroll phần data của bảng
   useEffect(() => {
     if (!presentationMode) return;
     const scrollEl = stockTableRef.current?.getScrollElement();
@@ -558,7 +590,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
 
       // Lưu mã cần scroll đến (sẽ thực hiện sau khi data load xong)
       pendingScrollSymbolRef.current = symbol;
-      //nếu cùng sàn → scroll luôn
+      // nếu cùng sàn → scroll luôn
       if (exchange === selectedExchange) {
         setTimeout(() => {
           stockTableRef.current?.scrollToSymbol(symbol);
@@ -580,12 +612,12 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     if (found) {
       setTimeout(() => {
         stockTableRef.current?.scrollToSymbol(symbol);
-      }, 100); //chờ load cho chắc
+      }, 100); // chờ load cho chắc
       pendingScrollSymbolRef.current = null; // Xóa pending sau khi đã gọi scroll
     }
   }, [instruments]);
 
-  //nút Ghim và Bỏ ghim cho từng mã cổ phiếu
+  // Nút Ghim và Bỏ ghim cho từng mã cổ phiếu
   const togglePin = useCallback((symbol: string) => {
     setPinnedSymbols((prev) => {
       const newPinned = new Set(prev);
@@ -667,7 +699,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
         <Footer unitSettings={unitSettings} />
       </div>
 
-      {/* OrderModal — đặt ngoài các div vẻ viewport */}
+      {/* OrderModal — đặt ngoài các div viewport */}
       <OrderModal
         open={orderModalOpen}
         symbol={orderModalSymbol}
@@ -679,6 +711,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
         onClose={() => setOrderModalOpen(false)}
         onSuccess={handleOrderSuccess}
       />
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 };

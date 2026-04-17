@@ -1,4 +1,4 @@
-// src/socket/matchingEngine.ts
+﻿// src/socket/matchingEngine.ts
 // Mock matching engine — so sánh giá đặt vs giá thật từ ASEAN cache
 // Chạy mỗi 2 giây, duyệt tất cả lệnh pending/partial và khớp nếu điều kiện thỏa
 
@@ -93,6 +93,11 @@ async function matchFull(order: IOrder, matchedPrice: number, io: Server) {
 
   // === CHUYỂN ĐỔI TÀI SẢN ===
   const userId = order.userId;
+  let cashIn = 0;
+  let cashOut = 0;
+  let fee = 0;
+  let refund = 0;
+  let lockedReleased = 0;
 
   if (order.side === "buy") {
     // MUA khớp:
@@ -105,7 +110,10 @@ async function matchFull(order: IOrder, matchedPrice: number, io: Server) {
 
     const actualFee = Math.ceil(matchedPrice * matchedQty * FEE_RATE); // phí thực tế tính theo giá khớp
     const actualDeducted = matchedPrice * matchedQty + actualFee; // tiền thực trả (CP + phí)
-    const refund = lockedAmount - actualDeducted; // hoàn lại phần dư (nếu có)
+    refund = lockedAmount - actualDeducted; // hoàn lại phần dư (nếu có)
+    fee = actualFee;
+    cashOut = actualDeducted;
+    lockedReleased = lockedAmount;
 
     await Account.updateOne({ userId }, { $inc: { locked: -lockedAmount, available: refund } });
 
@@ -134,6 +142,7 @@ async function matchFull(order: IOrder, matchedPrice: number, io: Server) {
     // BÁN khớp: cổ phiếu locked được giải phóng, tiền nhận = matchedValue - phí 0.15%
     const fee = Math.ceil(matchedValue * FEE_RATE);
     const netReceived = matchedValue - fee; // tiền thực nhận sau khi trừ phí
+    cashIn = netReceived;
 
     await Holding.updateOne({ userId, symbol: order.symbol }, { $inc: { locked: -matchedQty } });
     await Account.updateOne({ userId }, { $inc: { available: netReceived } });
@@ -163,6 +172,12 @@ async function matchFull(order: IOrder, matchedPrice: number, io: Server) {
     status: order.status,
     matchedPrice: order.matchedPrice,
     matchedAt: order.matchedAt,
+    cashIn,
+    cashOut,
+    fee,
+    refund,
+    lockedReleased,
+    matchedQtyDelta: matchedQty,
   });
 }
 
