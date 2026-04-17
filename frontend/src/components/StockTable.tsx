@@ -1,5 +1,5 @@
 //src/components/StockTable.tsx
-import {  useState, useEffect, useRef, useMemo, useCallback, useImperativeHandle, forwardRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, useImperativeHandle, forwardRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { PushpinOutlined, LockOutlined } from "@ant-design/icons";
 import type { UnitSettings, ColumnVisibility } from "../types/tableConfig";
@@ -101,7 +101,22 @@ const NUMBER_FORMATTER_2 = new Intl.NumberFormat("vi-VN", { minimumFractionDigit
 const NUMBER_FORMATTER_0 = new Intl.NumberFormat("vi-VN");
 
 const StockTable = forwardRef<StockTableHandle, StockTableProps>(
-  ({ instruments, pinnedSymbols, onTogglePin, flashingCells, loading = false, unitSettings, columnVisibility: v, selectedExchange, token, activeOrdersMap, onOrderClick }, ref) => {
+  (
+    {
+      instruments,
+      pinnedSymbols,
+      onTogglePin,
+      flashingCells,
+      loading = false,
+      unitSettings,
+      columnVisibility: v,
+      selectedExchange,
+      token,
+      activeOrdersMap,
+      onOrderClick,
+    },
+    ref,
+  ) => {
     // TanStack Virtual setup - PHẢI được gọi không điều kiện TRƯỚC bất kỳ return sớm nào
     const parentRef = useRef<HTMLDivElement>(null);
 
@@ -168,24 +183,27 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
     const [sortAnimating, setSortAnimating] = useState(false); //animation
 
     // Vòng đời: Mặc định → tăng dần → giảm dần → Mặc định
-    const handleSort = useCallback((key: SortKey) => {
-      setSortAnimating(true); // bật hiệu ứng fade trước khi sort
-      if (sortKey !== key) {
-        // Nhấn cột mới → bắt đầu "tăng dần"
-        setSortKey(key);
-        setSortDir("asc");
-      } else {
-        // Cùng cột → vòng đời tiếp là giảm dần
-        setSortDir((prev) => {
-          if (prev === "asc") return "desc";
-          if (prev === "desc") {
-            setSortKey(null); // Về mặc định → xóa sort key
-            return "default";
-          }
-          return "asc";
-        });
-      }
-    }, [sortKey]);
+    const handleSort = useCallback(
+      (key: SortKey) => {
+        setSortAnimating(true); // bật hiệu ứng fade trước khi sort
+        if (sortKey !== key) {
+          // Nhấn cột mới → bắt đầu "tăng dần"
+          setSortKey(key);
+          setSortDir("asc");
+        } else {
+          // Cùng cột → vòng đời tiếp là giảm dần
+          setSortDir((prev) => {
+            if (prev === "asc") return "desc";
+            if (prev === "desc") {
+              setSortKey(null); // Về mặc định → xóa sort key
+              return "default";
+            }
+            return "asc";
+          });
+        }
+      },
+      [sortKey],
+    );
 
     // Tắt hiệu ứng fade sau khi animation chạy xong
     useEffect(() => {
@@ -405,13 +423,9 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
               <button className={styles.orderLockBtn} title="Vui lòng đăng nhập để đặt lệnh">
                 <LockOutlined style={{ fontSize: 12, color: "#4b5563" }} />
               </button>
-            ) : activeOrdersMap.has(stock.symbol) ? (
-              <span
-                className={styles.orderDot}
-                title={`Có lệnh ${activeOrdersMap.get(stock.symbol)?.side === "buy" ? "Mua" : "Bán"} đang chờ khớp`}
-              />
             ) : (
               <>
+                {activeOrdersMap.has(stock.symbol) && <span className={styles.orderDot} title="Bạn đang có lệnh chờ khớp ở mã này" />}
                 <button
                   className={styles.orderBuyBtn}
                   title="Đặt lệnh Mua"
@@ -419,7 +433,17 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
                     e.preventDefault();
                     onOrderClick(
                       stock.symbol,
-                      { symbol: stock.symbol, FullName: stock.FullName, reference: stock.reference, ceiling: stock.ceiling, floor: stock.floor, closePrice: stock.closePrice, bidPrice1: stock.bidPrice1, offerPrice1: stock.offerPrice1, totalTrading: stock.totalTrading },
+                      {
+                        symbol: stock.symbol,
+                        FullName: stock.FullName,
+                        reference: stock.reference,
+                        ceiling: stock.ceiling,
+                        floor: stock.floor,
+                        closePrice: stock.closePrice,
+                        bidPrice1: stock.bidPrice1,
+                        offerPrice1: stock.offerPrice1,
+                        totalTrading: stock.totalTrading,
+                      },
                       "buy",
                     );
                   }}
@@ -433,7 +457,17 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
                     e.preventDefault();
                     onOrderClick(
                       stock.symbol,
-                      { symbol: stock.symbol, FullName: stock.FullName, reference: stock.reference, ceiling: stock.ceiling, floor: stock.floor, closePrice: stock.closePrice, bidPrice1: stock.bidPrice1, offerPrice1: stock.offerPrice1, totalTrading: stock.totalTrading },
+                      {
+                        symbol: stock.symbol,
+                        FullName: stock.FullName,
+                        reference: stock.reference,
+                        ceiling: stock.ceiling,
+                        floor: stock.floor,
+                        closePrice: stock.closePrice,
+                        bidPrice1: stock.bidPrice1,
+                        offerPrice1: stock.offerPrice1,
+                        totalTrading: stock.totalTrading,
+                      },
                       "sell",
                     );
                   }}
@@ -663,40 +697,136 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
             )}
 
             {/* Sub-headers (row 2) — Bên mua: click sort trên sub-header */}
-            {v.bidPrice3 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidPrice3")}>Giá 3{sortIcon("bidPrice3")}</div>}
-            {v.bidVol3 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidVol3")}>KL 3{sortIcon("bidVol3")}</div>}
-            {v.bidPrice2 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidPrice2")}>Giá 2{sortIcon("bidPrice2")}</div>}
-            {v.bidVol2 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidVol2")}>KL 2{sortIcon("bidVol2")}</div>}
-            {v.bidPrice1 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidPrice1")}>Giá 1{sortIcon("bidPrice1")}</div>}
-            {v.bidVol1 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidVol1")}>KL 1{sortIcon("bidVol1")}</div>}
+            {v.bidPrice3 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidPrice3")}>
+                Giá 3{sortIcon("bidPrice3")}
+              </div>
+            )}
+            {v.bidVol3 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidVol3")}>
+                KL 3{sortIcon("bidVol3")}
+              </div>
+            )}
+            {v.bidPrice2 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidPrice2")}>
+                Giá 2{sortIcon("bidPrice2")}
+              </div>
+            )}
+            {v.bidVol2 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidVol2")}>
+                KL 2{sortIcon("bidVol2")}
+              </div>
+            )}
+            {v.bidPrice1 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidPrice1")}>
+                Giá 1{sortIcon("bidPrice1")}
+              </div>
+            )}
+            {v.bidVol1 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidVol1")}>
+                KL 1{sortIcon("bidVol1")}
+              </div>
+            )}
 
             {/* Sub-headers — Khớp lệnh */}
-            {v.matchPrice && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("closePrice")}>Giá{sortIcon("closePrice")}</div>}
-            {v.matchVol && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("closeVol")}>KL{sortIcon("closeVol")}</div>}
-            {v.matchChange && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("change")}>+/-{sortIcon("change")}</div>}
-            {v.matchChangePercent && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("changePercent")}>%{sortIcon("changePercent")}</div>}
+            {v.matchPrice && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("closePrice")}>
+                Giá{sortIcon("closePrice")}
+              </div>
+            )}
+            {v.matchVol && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("closeVol")}>
+                KL{sortIcon("closeVol")}
+              </div>
+            )}
+            {v.matchChange && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("change")}>
+                +/-{sortIcon("change")}
+              </div>
+            )}
+            {v.matchChangePercent && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("changePercent")}>
+                %{sortIcon("changePercent")}
+              </div>
+            )}
 
             {/* Sub-headers — Bên bán */}
-            {v.offerPrice1 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerPrice1")}>Giá 1{sortIcon("offerPrice1")}</div>}
-            {v.offerVol1 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerVol1")}>KL 1{sortIcon("offerVol1")}</div>}
-            {v.offerPrice2 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerPrice2")}>Giá 2{sortIcon("offerPrice2")}</div>}
-            {v.offerVol2 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerVol2")}>KL 2{sortIcon("offerVol2")}</div>}
-            {v.offerPrice3 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerPrice3")}>Giá 3{sortIcon("offerPrice3")}</div>}
-            {v.offerVol3 && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerVol3")}>KL 3{sortIcon("offerVol3")}</div>}
+            {v.offerPrice1 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerPrice1")}>
+                Giá 1{sortIcon("offerPrice1")}
+              </div>
+            )}
+            {v.offerVol1 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerVol1")}>
+                KL 1{sortIcon("offerVol1")}
+              </div>
+            )}
+            {v.offerPrice2 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerPrice2")}>
+                Giá 2{sortIcon("offerPrice2")}
+              </div>
+            )}
+            {v.offerVol2 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerVol2")}>
+                KL 2{sortIcon("offerVol2")}
+              </div>
+            )}
+            {v.offerPrice3 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerPrice3")}>
+                Giá 3{sortIcon("offerPrice3")}
+              </div>
+            )}
+            {v.offerVol3 && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerVol3")}>
+                KL 3{sortIcon("offerVol3")}
+              </div>
+            )}
 
             {/* Sub-headers — Dư */}
-            {v.surplusBid && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("TOTAL_BID_QTTY")}>Mua{sortIcon("TOTAL_BID_QTTY")}</div>}
-            {v.surplusOffer && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("TOTAL_OFFER_QTTY")}>Bán{sortIcon("TOTAL_OFFER_QTTY")}</div>}
+            {v.surplusBid && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("TOTAL_BID_QTTY")}>
+                Mua{sortIcon("TOTAL_BID_QTTY")}
+              </div>
+            )}
+            {v.surplusOffer && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("TOTAL_OFFER_QTTY")}>
+                Bán{sortIcon("TOTAL_OFFER_QTTY")}
+              </div>
+            )}
 
             {/* Sub-headers — Giá */}
-            {v.priceHigh && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("high")}>Cao{sortIcon("high")}</div>}
-            {v.priceAvg && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("averagePrice")}>TB{sortIcon("averagePrice")}</div>}
-            {v.priceLow && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("low")}>Thấp{sortIcon("low")}</div>}
+            {v.priceHigh && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("high")}>
+                Cao{sortIcon("high")}
+              </div>
+            )}
+            {v.priceAvg && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("averagePrice")}>
+                TB{sortIcon("averagePrice")}
+              </div>
+            )}
+            {v.priceLow && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("low")}>
+                Thấp{sortIcon("low")}
+              </div>
+            )}
 
             {/* Sub-headers — ĐTNN */}
-            {v.foreignBuy && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("foreignBuy")}>Mua{sortIcon("foreignBuy")}</div>}
-            {v.foreignSell && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("foreignSell")}>Bán{sortIcon("foreignSell")}</div>}
-            {v.foreignRemain && <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("foreignRemain")}>Room{sortIcon("foreignRemain")}</div>}
+            {v.foreignBuy && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("foreignBuy")}>
+                Mua{sortIcon("foreignBuy")}
+              </div>
+            )}
+            {v.foreignSell && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("foreignSell")}>
+                Bán{sortIcon("foreignSell")}
+              </div>
+            )}
+            {v.foreignRemain && (
+              <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("foreignRemain")}>
+                Room{sortIcon("foreignRemain")}
+              </div>
+            )}
           </div>
         </div>
 
