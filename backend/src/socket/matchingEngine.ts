@@ -42,11 +42,7 @@ export function startMatchingEngine(io: Server) {
 }
 
 // Thử khớp 1 lệnh dựa trên giá realtime từ cache
-async function tryMatchOrder(
-  order: IOrder,
-  cache: Record<string, Map<string, Record<string, unknown>>>,
-  io: Server,
-) {
+async function tryMatchOrder(order: IOrder, cache: Record<string, Map<string, Record<string, unknown>>>, io: Server) {
   const exchangeData = cache[order.exchange];
   if (!exchangeData) return;
 
@@ -108,13 +104,10 @@ async function matchFull(order: IOrder, matchedPrice: number, io: Server) {
     const lockedAmount = lockPrice * matchedQty + lockedFee; // tổng tiền đã lock khi đặt lệnh
 
     const actualFee = Math.ceil(matchedPrice * matchedQty * FEE_RATE); // phí thực tế tính theo giá khớp
-    const actualDeducted = matchedPrice * matchedQty + actualFee;     // tiền thực trả (CP + phí)
-    const refund = lockedAmount - actualDeducted;                      // hoàn lại phần dư (nếu có)
+    const actualDeducted = matchedPrice * matchedQty + actualFee; // tiền thực trả (CP + phí)
+    const refund = lockedAmount - actualDeducted; // hoàn lại phần dư (nếu có)
 
-    await Account.updateOne(
-      { userId },
-      { $inc: { locked: -lockedAmount, available: refund } },
-    );
+    await Account.updateOne({ userId }, { $inc: { locked: -lockedAmount, available: refund } });
 
     // Cập nhật hoặc tạo holding — tính giá vốn trung bình (không tính phí vào avgPrice)
     const holding = await Holding.findOne({ userId, symbol: order.symbol });
@@ -134,27 +127,25 @@ async function matchFull(order: IOrder, matchedPrice: number, io: Server) {
       });
     }
 
-    console.log(`[MatchingEngine] 💰 BUY matched: -${lockedAmount.toLocaleString()} locked, +${refund.toLocaleString()} refund, phí: ${actualFee.toLocaleString()}, +${matchedQty} ${order.symbol}`);
+    console.log(
+      `[MatchingEngine] 💰 BUY matched: -${lockedAmount.toLocaleString()} locked, +${refund.toLocaleString()} refund, phí: ${actualFee.toLocaleString()}, +${matchedQty} ${order.symbol}`,
+    );
   } else {
     // BÁN khớp: cổ phiếu locked được giải phóng, tiền nhận = matchedValue - phí 0.15%
     const fee = Math.ceil(matchedValue * FEE_RATE);
     const netReceived = matchedValue - fee; // tiền thực nhận sau khi trừ phí
 
-    await Holding.updateOne(
-      { userId, symbol: order.symbol },
-      { $inc: { locked: -matchedQty } },
-    );
-    await Account.updateOne(
-      { userId },
-      { $inc: { available: netReceived } },
-    );
+    await Holding.updateOne({ userId, symbol: order.symbol }, { $inc: { locked: -matchedQty } });
+    await Account.updateOne({ userId }, { $inc: { available: netReceived } });
 
-    console.log(`[MatchingEngine] 💰 SELL matched: -${matchedQty} ${order.symbol} locked, phí: ${fee.toLocaleString()}, +${netReceived.toLocaleString()} available`);
+    console.log(
+      `[MatchingEngine] 💰 SELL matched: -${matchedQty} ${order.symbol} locked, phí: ${fee.toLocaleString()}, +${netReceived.toLocaleString()} available`,
+    );
   }
 
   console.log(
     `[MatchingEngine] ✅ KHỚP LỆNH — orderId: ${order._id} | ${order.side} ${order.symbol} | ` +
-    `giá đặt: ${order.price} → giá khớp: ${matchedPrice} | KL: ${order.quantity}`,
+      `giá đặt: ${order.price} → giá khớp: ${matchedPrice} | KL: ${order.quantity}`,
   );
 
   // Emit socket event cho frontend của user đó
