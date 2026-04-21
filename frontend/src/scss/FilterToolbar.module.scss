@@ -278,13 +278,149 @@
   }
 }
 
+//SCSS của danh mục ưa thích
+.favoriteMenu {
+  min-width: 280px;
+  max-width: 340px;
+  padding: 8px;
+}
+
+.favoriteCreateRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.favoriteInput {
+  width: 100%;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid #374151;
+  background: #111827;
+  color: #e5e7eb;
+  font-size: 13px;
+  outline: none;
+
+  &:focus {
+    border-color: #ef4444;
+  }
+}
+
+.favoriteList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 2px;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #374151;
+    border-radius: 3px;
+  }
+}
+
+.favoriteEmpty {
+  color: #9ca3af;
+  font-size: 12px;
+  padding: 8px 10px;
+}
+
+.favoriteRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: #d1d5db;
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+
+  &:hover {
+    background: #374151;
+  }
+}
+
+.favoriteName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.favoriteActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.favoriteRow:hover .favoriteActions {
+  opacity: 1;
+}
+
+.favoriteIconBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: 1px solid #374151;
+  background: #111827;
+  color: #d1d5db;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    border-color: #ef4444;
+    color: #ef4444;
+  }
+}
+
+.favoriteRow.selected {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.favoriteRow.selected .favoriteActions {
+  opacity: 1;
+}
+
+.favoriteSectionTitle {
+  padding: 8px 10px 4px;
+  color: #9ca3af;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+//hết danh mục ưa thích
+
 .customSelectOption {
   padding: 8px 12px;
   font-size: 13px;
   color: #d1d5db;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 
   &:hover {
     background: #374151;

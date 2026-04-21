@@ -275,8 +275,6 @@ const cancelOrder = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export { placeOrder, getOrders, cancelOrder, getBalance, getHoldings };
-
 // ====================== LẤY SỐ DƯ TÀI KHOẢN ======================
 async function getBalance(req: AuthRequest, res: Response) {
   try {
@@ -317,3 +315,5 @@ async function getHoldings(req: AuthRequest, res: Response) {
     return res.status(500).json({ message: "Lỗi server khi lấy danh mục" });
   }
 }
+
+export { placeOrder, getOrders, cancelOrder, getBalance, getHoldings };

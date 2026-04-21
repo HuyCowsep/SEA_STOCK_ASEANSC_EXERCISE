@@ -65,6 +65,12 @@ interface SearchSymbolInfo {
   exchange: "HOSE" | "HNX" | "UPCOM";
 }
 
+interface FavoriteList {
+  id: string;
+  nameList: string;
+  symbols: string[];
+}
+
 // Type cho realtime data từ backend (snapshot hoặc delta)
 interface RealtimeDataResponse {
   s: string;
@@ -122,6 +128,8 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [industryMap, setIndustryMap] = useState<Record<string, string[]>>({});
   const [selectedBuyIn, setSelectedBuyIn] = useState<string>("");
+  const [favoriteLists, setFavoriteLists] = useState<FavoriteList[]>([]);
+  const [selectedFavoriteListId, setSelectedFavoriteListId] = useState<string | null>(null);
   //const [buyInSymbols, setBuyInSymbols] = useState<Set<string>>(new Set());
   // Flash từng ô riêng lẻ: key = "symbol:fieldName", value = "up" | "down"
   const [flashingCells, setFlashingCells] = useState<Map<string, FlashCellState>>(new Map());
@@ -562,19 +570,70 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   }, [presentationMode]);
 
   // Filter instruments
+  const selectedFavoriteSymbols = useMemo(() => {
+    if (!selectedFavoriteListId) return null;
+    const active = favoriteLists.find((list) => list.id === selectedFavoriteListId);
+    return new Set(active?.symbols ?? []);
+  }, [favoriteLists, selectedFavoriteListId]);
+
   const filteredInstruments = useMemo(() => {
+    // Nếu đang ở chế độ Favorite List
+    if (selectedFavoriteSymbols && selectedFavoriteSymbols.size > 0) {
+      const favoriteUpper = new Set(Array.from(selectedFavoriteSymbols).map((s) => s.toUpperCase()));
+
+      // Lọc ra những mã đã có data realtime
+      return instruments.filter((stock) => favoriteUpper.has(stock.symbol.toUpperCase()));
+    }
+
+    // Mode bình thường (sàn / ngành / warrants / etf)
     let result = instruments;
-    // Filter chứng quyền (CW)
     if (showWarrants) {
       result = result.filter((stock) => CW_REGEX.test(stock.symbol));
     }
-    // Filter ETF
     if (showETF) {
       result = result.filter((stock) => ETF_REGEX.test(stock.symbol));
     }
     return result;
-  }, [instruments, showWarrants, showETF]);
+  }, [instruments, selectedFavoriteSymbols, showWarrants, showETF]);
 
+  // ====================== TẠO DANH MỤC YÊU THÍCH ======================
+  const handleFavoriteCreate = useCallback((name: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) return null;
+
+    const newId = `fav_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const nextList: FavoriteList = {
+      id: newId,
+      nameList: trimmedName,
+      symbols: [],
+    };
+    setFavoriteLists((prev) => [...prev, nextList]);
+    setSelectedFavoriteListId(newId);
+    return newId;
+  }, []);
+
+  // ====================== ĐỔI TÊN DANH MỤC ======================
+  const handleFavoriteRename = useCallback((id: string, newName: string) => {
+    const trimmedName = newName.trim();
+    if (!trimmedName) return false;
+
+    setFavoriteLists((prev) =>
+      prev.map((list) => {
+        if (list.id !== id) return list;
+        return { ...list, nameList: trimmedName };
+      }),
+    );
+
+    return true;
+  }, []);
+
+  // ====================== XÓA DANH MỤC YÊU THÍCH ======================
+  const handleFavoriteDelete = useCallback((id: string) => {
+    setFavoriteLists((prev) => prev.filter((list) => list.id !== id));
+    setSelectedFavoriteListId((prev) => (prev === id ? null : prev));
+  }, []);
+
+  // ====================== NÚT CHẾ ĐỘ TRÌNH CHIẾU ======================
   const handleTogglePresentation = useCallback(() => {
     setPresentationMode((p) => !p);
   }, []);
@@ -582,25 +641,64 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   // ====================== XỬ LÝ CHỌN MÃ TỪ SEARCH ======================
   const handleSearchSelect = useCallback(
     (symbol: string, exchange: "HOSE" | "HNX" | "UPCOM") => {
-      // Reset tất cả filter về mặc định
+      // Reset tất cả filter về mặc định (ngoài favorite)
       setSelectedCategory("all");
       setSelectedBuyIn("");
       setShowWarrants(false);
       setShowETF(false);
 
-      // Lưu mã cần scroll đến (sẽ thực hiện sau khi data load xong)
+      // ====================== MODE DANH MỤC YÊU THÍCH ======================
+      if (selectedFavoriteListId) {
+        setFavoriteLists((prev) => {
+          const updated = prev.map((list) => {
+            if (list.id !== selectedFavoriteListId) return list;
+
+            const upperSymbol = symbol.toUpperCase().trim();
+
+            if (list.symbols.some((s) => s.toUpperCase() === upperSymbol)) {
+              pushToast("Mã đã tồn tại", `Mã ${upperSymbol} đã có trong danh mục`, "info");
+              return list;
+            }
+
+            const newList = {
+              ...list,
+              symbols: [...list.symbols, upperSymbol],
+            };
+
+            console.log("👉 Updated list:", newList); // ✅ log list vừa sửa
+
+            return newList;
+          });
+
+          console.log("👉 All favoriteLists sau update:", updated); // ✅ full state
+
+          return updated;
+        });
+
+        pushToast("Thêm thành công", `Đã thêm mã ${symbol.toUpperCase()} vào danh mục`, "success");
+
+        pendingScrollSymbolRef.current = symbol.toUpperCase();
+        return;
+      }
+
+      // ====================== MODE SEARCH BÌNH THƯỜNG (không phải favorite) ======================
       pendingScrollSymbolRef.current = symbol;
-      // nếu cùng sàn → scroll luôn
+
       if (exchange === selectedExchange) {
         setTimeout(() => {
           stockTableRef.current?.scrollToSymbol(symbol);
           pendingScrollSymbolRef.current = null;
         }, 0);
       } else {
-        setSelectedExchange(exchange);
+        setSelectedExchange(exchange as "HOSE" | "30" | "UPCOM" | "HNX" | "HNX30");
       }
     },
-    [selectedExchange],
+    [
+      selectedFavoriteListId,
+      selectedExchange,
+      pushToast,
+      // KHÔNG đưa favoriteLists vào dependency vì ta đang cập nhật state bằng functional update (prev => ...)
+    ],
   );
 
   // Khi instruments thay đổi (data đã load) → kiểm tra nếu có mã đang chờ scroll thì nhảy đến
@@ -660,6 +758,12 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
           onTogglePresentation={handleTogglePresentation}
           selectedBuyIn={selectedBuyIn}
           onBuyInChange={setSelectedBuyIn}
+          favoriteLists={favoriteLists}
+          selectedFavoriteListId={selectedFavoriteListId}
+          onFavoriteSelect={setSelectedFavoriteListId}
+          onFavoriteCreate={handleFavoriteCreate}
+          onFavoriteRename={handleFavoriteRename}
+          onFavoriteDelete={handleFavoriteDelete}
           showWarrants={showWarrants}
           onWarrantsChange={setShowWarrants}
           showETF={showETF}

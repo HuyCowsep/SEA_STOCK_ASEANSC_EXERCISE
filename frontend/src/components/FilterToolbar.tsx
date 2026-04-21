@@ -2,10 +2,21 @@
 import { memo, useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { Tooltip, Dropdown } from "antd";
-import { SearchOutlined, PlayCircleOutlined, PauseCircleOutlined, SettingOutlined } from "@ant-design/icons";
+import {
+  SearchOutlined,
+  PlayCircleOutlined,
+  PauseCircleOutlined,
+  SettingOutlined,
+  PlusOutlined,
+  EditOutlined,
+  CheckOutlined,
+  CloseOutlined,
+} from "@ant-design/icons";
 import type { UnitSettings, ColumnVisibility } from "../types/tableConfig";
 import UnitSettingsModal from "../modals/UnitSettingsModal";
 import DisplaySettingsModal from "../modals/DisplaySettingsModal";
+import { useToast } from "../utils/useToast";
+import ToastContainer from "../utils/ToastContainer";
 import styles from "../scss/FilterToolbar.module.scss";
 
 // Dữ liệu cho search toàn bộ mã CK
@@ -13,6 +24,12 @@ interface SearchSymbolInfo {
   symbol: string;
   FullName?: string;
   exchange: "HOSE" | "HNX" | "UPCOM";
+}
+
+interface FavoriteList {
+  id: string;
+  nameList: string;
+  symbols: string[];
 }
 
 interface FilterToolbarProps {
@@ -27,6 +44,12 @@ interface FilterToolbarProps {
   onTogglePresentation: () => void;
   selectedBuyIn: string;
   onBuyInChange: (buyIn: string) => void;
+  favoriteLists: FavoriteList[];
+  selectedFavoriteListId: string | null;
+  onFavoriteSelect: (id: string | null) => void;
+  onFavoriteCreate: (name: string) => string | null;
+  onFavoriteRename: (id: string, newName: string) => boolean;
+  onFavoriteDelete: (id: string) => void;
   showWarrants: boolean;
   onWarrantsChange: (show: boolean) => void;
   showETF: boolean;
@@ -63,6 +86,12 @@ const FilterToolbar = ({
   onTogglePresentation,
   // selectedBuyIn,
   onBuyInChange,
+  favoriteLists,
+  selectedFavoriteListId,
+  onFavoriteSelect,
+  onFavoriteCreate,
+  onFavoriteRename,
+  onFavoriteDelete,
   onWarrantsChange,
   onETFChange,
   unitSettings,
@@ -99,11 +128,20 @@ const FilterToolbar = ({
   const [suggestions, setSuggestions] = useState<SearchSymbolInfo[]>([]);
   const [unitModalOpen, setUnitModalOpen] = useState(false);
   const [displayModalOpen, setDisplayModalOpen] = useState(false);
+  const [newFavoriteName, setNewFavoriteName] = useState("");
+  const [editingFavoriteId, setEditingFavoriteId] = useState<string | null>(null);
+  const [editingFavoriteName, setEditingFavoriteName] = useState("");
+  const { toasts, pushToast, removeToast } = useToast();
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number }>({
     top: 0,
     left: 0,
     width: 0,
   });
+
+  const selectedFavoriteList = useMemo(
+    () => favoriteLists.find((list) => list.id === selectedFavoriteListId) ?? null,
+    [favoriteLists, selectedFavoriteListId],
+  );
 
   // ====================== FILTER GROUPS CONFIG ======================
   const filterGroups: FilterGroup[] = [
@@ -222,7 +260,7 @@ const FilterToolbar = ({
       //   break;
       // case "analysis":
       //   setLocalValues((prev) => ({ ...prev, analysis: subValue || "increase" }));
-        // break;
+      // break;
       // bonds, tprl: chưa có logic data, chỉ highlight
     }
 
@@ -251,6 +289,89 @@ const FilterToolbar = ({
         return null;
     }
   };
+
+  const isFavoriteNameTaken = useCallback(
+    (name: string, excludeId?: string) =>
+      favoriteLists.some((list) => list.id !== excludeId && list.nameList.trim().toLowerCase() === name.trim().toLowerCase()),
+    [favoriteLists],
+  );
+
+  const handleCreateFavorite = useCallback(() => {
+    const trimmedName = newFavoriteName.trim();
+    if (!trimmedName) {
+      pushToast("Tạo danh mục thất bại", "Vui lòng nhập tên danh mục", "error");
+      return;
+    }
+    if (isFavoriteNameTaken(trimmedName)) {
+      pushToast("Tạo danh mục thất bại", "Tên danh mục đã tồn tại", "error");
+      return;
+    }
+
+    const createdId = onFavoriteCreate(trimmedName);
+    if (!createdId) {
+      pushToast("Tạo danh mục thất bại", "Không thể tạo danh mục mới", "error");
+      return;
+    }
+
+    setNewFavoriteName("");
+    setEditingFavoriteId(null);
+    setEditingFavoriteName("");
+    pushToast("Tạo danh mục thành công", `Đã tạo danh mục "${trimmedName}"`, "success");
+  }, [isFavoriteNameTaken, newFavoriteName, onFavoriteCreate, pushToast]);
+
+  const handleStartRenameFavorite = useCallback((id: string, currentName: string) => {
+    setEditingFavoriteId(id);
+    setEditingFavoriteName(currentName);
+  }, []);
+
+  const handleConfirmRenameFavorite = useCallback(() => {
+    if (!editingFavoriteId) return;
+    const trimmedName = editingFavoriteName.trim();
+    if (!trimmedName) {
+      pushToast("Đổi tên thất bại", "Tên danh mục không được để trống", "error");
+      return;
+    }
+    if (isFavoriteNameTaken(trimmedName, editingFavoriteId)) {
+      pushToast("Đổi tên thất bại", "Tên danh mục đã tồn tại", "error");
+      return;
+    }
+
+    const ok = onFavoriteRename(editingFavoriteId, trimmedName);
+    if (!ok) {
+      pushToast("Đổi tên thất bại", "Không tìm thấy danh mục để cập nhật", "error");
+      return;
+    }
+
+    pushToast("Đổi tên thành công", `Đã đổi tên thành "${trimmedName}"`, "success");
+    setEditingFavoriteId(null);
+    setEditingFavoriteName("");
+  }, [editingFavoriteId, editingFavoriteName, isFavoriteNameTaken, onFavoriteRename, pushToast]);
+
+  const handleCancelRenameFavorite = useCallback(() => {
+    setEditingFavoriteId(null);
+    setEditingFavoriteName("");
+  }, []);
+
+  const handleDeleteFavorite = useCallback(
+    (id: string) => {
+      const target = favoriteLists.find((list) => list.id === id);
+      onFavoriteDelete(id);
+      if (editingFavoriteId === id) {
+        setEditingFavoriteId(null);
+        setEditingFavoriteName("");
+      }
+      pushToast("Đã xoá danh mục", target ? `Danh mục "${target.nameList}" đã được xoá` : "Danh mục đã được xoá", "info");
+    },
+    [editingFavoriteId, favoriteLists, onFavoriteDelete, pushToast],
+  );
+
+  const handleSelectFavorite = useCallback(
+    (id: string) => {
+      onFavoriteSelect(id);
+      setHoveredGroup(null);
+    },
+    [onFavoriteSelect],
+  );
 
   // ====================== HOVER HANDLERS ======================
 
@@ -295,6 +416,19 @@ const FilterToolbar = ({
       if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     };
   }, []);
+
+  // Cleanup khi danh mục bị xoá trong lúc đang edit
+  useEffect(() => {
+    if (editingFavoriteId && !favoriteLists.some((list) => list.id === editingFavoriteId)) {
+      // Dùng setTimeout để tránh gọi setState đồng bộ trong effect
+      const timer = setTimeout(() => {
+        setEditingFavoriteId(null);
+        setEditingFavoriteName("");
+      }, 0);
+
+      return () => clearTimeout(timer);
+    }
+  }, [editingFavoriteId, favoriteLists]);
 
   // ====================== SEARCH LOGIC ======================
   // Tìm kiếm từ toàn bộ mã CK (allSymbols) — không phụ thuộc filter đang chọn
@@ -415,6 +549,14 @@ const FilterToolbar = ({
           </div>
         </div>
 
+        {/* === DANH MỤC ƯA THÍCH === */}
+        <div className={styles.customSelect} onMouseEnter={(e) => handleGroupMouseEnter("favorites", true, e)} onMouseLeave={handleGroupMouseLeave}>
+          <div className={`${styles.customSelectTrigger} ${selectedFavoriteList ? styles.activeExchange : ""}`}>
+            {selectedFavoriteList?.nameList ?? "Danh mục ưa thích"}
+            <span className={styles.arrow}>&#9662;</span>
+          </div>
+        </div>
+
         {/* Tất cả các filter */}
         {filterGroups.map((group) => (
           <div
@@ -463,6 +605,132 @@ const FilterToolbar = ({
         )}
 
         {/* Phần dropdown gợi ý khi tìm kiếm */}
+        {hoveredGroup === "favorites" &&
+          createPortal(
+            <div
+              className={`${styles.customSelectMenuPortal} ${styles.favoriteMenu}`}
+              style={{ top: menuPos.top, left: menuPos.left }}
+              onMouseEnter={handleDropdownMouseEnter}
+              onMouseLeave={handleDropdownMouseLeave}
+            >
+              {/* Input thêm mới */}
+              <div className={styles.favoriteCreateRow}>
+                <input
+                  type="text"
+                  value={newFavoriteName}
+                  onChange={(e) => setNewFavoriteName(e.target.value)}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    e.stopPropagation();
+                    if (e.key === "Enter") handleCreateFavorite();
+                  }}
+                  className={styles.favoriteInput}
+                  placeholder="Thêm mới"
+                />
+                <button
+                  type="button"
+                  className={styles.favoriteIconBtn}
+                  onMouseDown={(e) => {
+                    e.stopPropagation();
+                    handleCreateFavorite();
+                  }}
+                  aria-label="Tạo danh mục"
+                >
+                  <PlusOutlined />
+                </button>
+              </div>
+
+              {/* Section theo prompt */}
+              <div className={styles.favoriteSectionTitle}>Danh mục gợi ý</div>
+
+              <div className={styles.favoriteList}>
+                {favoriteLists.length === 0 && <div className={styles.favoriteEmpty}>Chưa có danh mục nào</div>}
+                {favoriteLists.map((list) => {
+                  const isEditing = editingFavoriteId === list.id;
+                  const isSelected = selectedFavoriteListId === list.id;
+
+                  if (isEditing) {
+                    return (
+                      <div key={list.id} className={styles.favoriteRow} onMouseDown={(e) => e.stopPropagation()}>
+                        <input
+                          type="text"
+                          value={editingFavoriteName}
+                          onChange={(e) => setEditingFavoriteName(e.target.value)}
+                          onKeyDown={(e) => {
+                            e.stopPropagation();
+                            if (e.key === "Enter") handleConfirmRenameFavorite();
+                            if (e.key === "Escape") handleCancelRenameFavorite();
+                          }}
+                          className={styles.favoriteInput}
+                          autoFocus
+                        />
+                        <div className={styles.favoriteActions}>
+                          <button
+                            type="button"
+                            className={styles.favoriteIconBtn}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleConfirmRenameFavorite();
+                            }}
+                            aria-label="Lưu tên danh mục"
+                          >
+                            <CheckOutlined />
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.favoriteIconBtn}
+                            onMouseDown={(e) => {
+                              e.stopPropagation();
+                              handleCancelRenameFavorite();
+                            }}
+                            aria-label="Huỷ đổi tên"
+                          >
+                            <CloseOutlined />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={list.id}
+                      className={`${styles.favoriteRow} ${isSelected ? styles.selected : ""}`}
+                      onMouseDown={() => handleSelectFavorite(list.id)}
+                    >
+                      <span className={styles.favoriteName}>{list.nameList}</span>
+                      <div className={styles.favoriteActions}>
+                        <button
+                          type="button"
+                          className={styles.favoriteIconBtn}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            handleStartRenameFavorite(list.id, list.nameList);
+                          }}
+                          aria-label="Đổi tên danh mục"
+                        >
+                          <EditOutlined />
+                        </button>
+                        <button
+                          type="button"
+                          className={styles.favoriteIconBtn}
+                          onMouseDown={(e) => {
+                            e.stopPropagation();
+                            handleDeleteFavorite(list.id);
+                          }}
+                          aria-label="Xoá danh mục"
+                        >
+                          <CloseOutlined />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>,
+            document.body,
+          )}
+
         {suggestions.length > 0 &&
           createPortal(
             <div className={styles.searchDropdownPortal} style={{ top: `${dropdownPosition.top}px`, left: `${dropdownPosition.left}px` }}>
@@ -510,6 +778,7 @@ const FilterToolbar = ({
         }}
         onCancel={() => setUnitModalOpen(false)}
       />
+
       {/* Modal nút cài đặt 2 */}
       <DisplaySettingsModal
         open={displayModalOpen}
@@ -520,6 +789,8 @@ const FilterToolbar = ({
         }}
         onCancel={() => setDisplayModalOpen(false)}
       />
+
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 };
