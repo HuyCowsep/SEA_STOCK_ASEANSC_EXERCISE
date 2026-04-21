@@ -59,7 +59,6 @@ type Props = {
   currentLanguage: string;
 };
 
-// Dữ liệu tối giản cho search toàn bộ mã (symbol + tên + sàn)
 interface SearchSymbolInfo {
   symbol: string;
   FullName?: string;
@@ -78,7 +77,7 @@ const FAVORITE_STORAGE_KEY = "favoriteLists";
 interface RealtimeDataResponse {
   s: string;
   d: Instrument[];
-  _type?: "snapshot" | "delta"; // snapshot = full data, delta = chỉ instruments đã thay đổi
+  _type?: "snapshot" | "delta"; // snapshot = toàn bộ data, delta = chỉ instruments đã thay đổi
 }
 type FlashCellState = { dir: "up" | "down"; seq: number };
 
@@ -136,11 +135,12 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   const [isFavoriteMode, setIsFavoriteMode] = useState(false);
   const [hasLoadedFavorites, setHasLoadedFavorites] = useState(false);
   //const [buyInSymbols, setBuyInSymbols] = useState<Set<string>>(new Set());
+
   // Flash từng ô riêng lẻ: key = "symbol:fieldName", value = "up" | "down"
   const [flashingCells, setFlashingCells] = useState<Map<string, FlashCellState>>(new Map());
-  const [presentationMode, setPresentationMode] = useState(false); // Chế độ trình chiếu (ẩn cột không cần thiết, phóng to font...)
+  const [presentationMode, setPresentationMode] = useState(false); // Chế độ trình chiếu
 
-  // ====================== ORDER SYSTEM ======================
+  // ====================== HỆ THỐNG ĐẶT LỆNH ======================
   const [orders, setOrders] = useState<Order[]>([]);
   const [availableBalance, setAvailableBalance] = useState<number | null>(null);
   const [orderModalOpen, setOrderModalOpen] = useState(false);
@@ -151,6 +151,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
 
   // ====================== DANH SÁCH TOÀN BỘ MÃ CHO SEARCH ======================
   const [allSymbols, setAllSymbols] = useState<SearchSymbolInfo[]>([]);
+  const pendingScrollSymbolRef = useRef<string | null>(null); // Mã đang chờ scroll đến sau khi chuyển sàn + data load xong
   const allSymbolsExchangeMap = useMemo(() => {
     const map = new Map<string, "HOSE" | "HNX" | "UPCOM">();
     allSymbols.forEach((item) => {
@@ -158,7 +159,6 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     });
     return map;
   }, [allSymbols]);
-  const pendingScrollSymbolRef = useRef<string | null>(null); // Mã đang chờ scroll đến sau khi chuyển sàn + data load xong
 
   const [showWarrants, setShowWarrants] = useState(false); // Lọc chứng quyền (CW)
   const [showETF, setShowETF] = useState(false); // Lọc ETF
@@ -256,10 +256,6 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     });
   }, []);
 
-  // ====================== SOCKET REALTIME BACKEND ======================
-  // Backend gửi 2 loại data:
-  // - _type="snapshot": toàn bộ instruments (khi join room hoặc reconnect)
-  // - _type="delta": chỉ instruments đã thay đổi (mỗi 1s)
   // ====================== ORDER SYSTEM EFFECTS ======================
   // Tải danh sách lệnh khi token thay đổi (login/logout)
   useEffect(() => {
@@ -296,7 +292,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     fetchOrders();
   }, [token]);
 
-  // Lắng nghe order_update từ socket
+  // Lắng nghe 'order_update' từ socket
   useEffect(() => {
     const formatVnd = (val: number) => `${VND_FORMATTER.format(val)} VND`;
 
@@ -492,7 +488,6 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
       socket.off("disconnect", handleDisconnect);
     };
   }, [applyFlashUpdates]);
-
   // ====================== HẾT SOCKET BACKEND ======================
 
   // Tải danh sách CP ngành và mapping ngành
@@ -517,8 +512,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     fetchIndustries();
   }, []);
 
-  // ====================== TẢI TOÀN BỘ MÃ CK CHO SEARCH ======================
-  // Gọi 1 lần khi mount — lấy symbol + FullName từ 3 sàn HOSE, HNX, UPCOM
+  // ====================== TẢI TOÀN BỘ MÃ CHỨNG KHOÁN CHO SEARCH ======================
   useEffect(() => {
     const fetchAllSymbols = async () => {
       try {
@@ -546,14 +540,12 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
         console.log("Lỗi tải danh sách mã cho search:", err);
       }
     };
-
     fetchAllSymbols();
   }, []);
 
-  // Fetch category (industry) instruments when selectedCategory changes
+  // fetch danh sách chứng khoán theo ngành khi selectedCategory thay đổi
   useEffect(() => {
     if (!selectedCategory || selectedCategory === "all") {
-      // Re-subscribe để backend gửi lại full snapshot của exchange hiện tại
       setLoading(true);
       socket.emit("subscribe_exchange", selectedExchange);
       return;
@@ -562,7 +554,6 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     const fetchCategoryInstruments = async () => {
       try {
         setLoading(true);
-        // Lấy danh sách mã từ industryMap
         const codeList = industryMap[selectedCategory];
         if (!codeList || codeList.length === 0) {
           setInstruments([]);
@@ -575,8 +566,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
         const data = response.data;
 
         if (data.s === "ok" && Array.isArray(data.d)) {
-          // Lọc dữ liệu hợp lệ
-          const validInstruments = data.d.filter((item: Instrument) => item.symbol && item.reference >= 0);
+          const validInstruments = data.d.filter((item: Instrument) => item.symbol && item.reference >= 0); //Lọc hợp lệ
           setInstruments(validInstruments);
         }
       } catch (err) {
@@ -586,11 +576,10 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
         setLoading(false);
       }
     };
-
     fetchCategoryInstruments();
   }, [selectedCategory, industryMap, selectedExchange]);
 
-  // Chế độ trình chiếu — scroll phần data của bảng
+  // Chế độ trình chiếu — scroll riêng phần data của bảng
   useEffect(() => {
     if (!presentationMode) return;
     const scrollEl = stockTableRef.current?.getScrollElement();
@@ -625,45 +614,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
       const activeList = favoriteLists.find((list) => list.id === selectedFavoriteListId);
       if (!activeList) return [];
 
-      return activeList.symbols.map((symbolRaw) => {
-        const symbol = symbolRaw.toUpperCase();
-        const existing = instrumentMap.get(symbol);
-        if (existing) return existing;
-
-        const inferredExchange = allSymbolsExchangeMap.get(symbol) ?? "HOSE";
-        // Tạo row placeholder để mã vẫn hiện trong bảng dù chưa có realtime snapshot.
-        return {
-          symbol,
-          FullName: "",
-          reference: 0,
-          ceiling: 0,
-          floor: 0,
-          bidPrice3: 0,
-          bidVol3: 0,
-          bidPrice2: 0,
-          bidVol2: 0,
-          bidPrice1: 0,
-          bidVol1: 0,
-          closePrice: 0,
-          closeVol: 0,
-          change: 0,
-          changePercent: 0,
-          offerPrice1: 0,
-          offerVol1: 0,
-          offerPrice2: 0,
-          offerVol2: 0,
-          offerPrice3: 0,
-          offerVol3: 0,
-          totalTrading: 0,
-          high: 0,
-          low: 0,
-          averagePrice: 0,
-          foreignBuy: 0,
-          foreignSell: 0,
-          foreignRemain: 0,
-          exchange: inferredExchange,
-        } as Instrument & { exchange: "HOSE" | "HNX" | "UPCOM" };
-      });
+      return activeList.symbols.map((symbolRaw) => instrumentMap.get(symbolRaw.toUpperCase())).filter((stock): stock is Instrument => !!stock);
     }
 
     // Mode bình thường (sàn / ngành / warrants / etf)
@@ -675,7 +626,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
       result = result.filter((stock) => ETF_REGEX.test(stock.symbol));
     }
     return result;
-  }, [allSymbolsExchangeMap, favoriteLists, instruments, isFavoriteMode, selectedFavoriteListId, selectedFavoriteSymbols, showWarrants, showETF]);
+  }, [favoriteLists, instruments, isFavoriteMode, selectedFavoriteListId, selectedFavoriteSymbols, showWarrants, showETF]);
 
   // ====================== TẠO DANH MỤC YÊU THÍCH ======================
   const handleFavoriteCreate = useCallback((name: string) => {
@@ -710,19 +661,22 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   }, []);
 
   // ====================== XÓA DANH MỤC YÊU THÍCH ======================
-  const handleFavoriteDelete = useCallback((id: string) => {
-    setFavoriteLists((prev) => {
-      const next = prev.filter((list) => list.id !== id);
-      if (next.length === 0) {
-        setSelectedFavoriteListId(null);
-        setIsFavoriteMode(false);
-      } else if (selectedFavoriteListId === id) {
-        setSelectedFavoriteListId(null);
-        setIsFavoriteMode(true);
-      }
-      return next;
-    });
-  }, [selectedFavoriteListId]);
+  const handleFavoriteDelete = useCallback(
+    (id: string) => {
+      setFavoriteLists((prev) => {
+        const next = prev.filter((list) => list.id !== id);
+        if (next.length === 0) {
+          setSelectedFavoriteListId(null);
+          setIsFavoriteMode(false);
+        } else if (selectedFavoriteListId === id) {
+          setSelectedFavoriteListId(null);
+          setIsFavoriteMode(true);
+        }
+        return next;
+      });
+    },
+    [selectedFavoriteListId],
+  );
 
   const handleFavoriteSelect = useCallback((id: string | null) => {
     setSelectedFavoriteListId(id);
@@ -750,6 +704,9 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
       // ====================== MODE DANH MỤC YÊU THÍCH ======================
       if (selectedFavoriteListId) {
         setIsFavoriteMode(true);
+
+        let isDuplicate = false;
+
         setFavoriteLists((prev) => {
           const updated = prev.map((list) => {
             if (list.id !== selectedFavoriteListId) return list;
@@ -757,28 +714,33 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
             const upperSymbol = symbol.toUpperCase().trim();
 
             if (list.symbols.some((s) => s.toUpperCase() === upperSymbol)) {
-              pushToast("Mã đã tồn tại", `Mã ${upperSymbol} đã có trong danh mục`, "info");
+              isDuplicate = true; // Đánh dấu trùng
               return list;
             }
 
-            const newList = {
+            return {
               ...list,
               symbols: [...list.symbols, upperSymbol],
             };
-
-            return newList;
           });
 
           return updated;
         });
 
-        pushToast("Thêm thành công", `Đã thêm mã ${symbol.toUpperCase()} vào danh mục`, "success");
+        // Chỉ hiện toast sau khi state update xong
+        setTimeout(() => {
+          if (isDuplicate) {
+            pushToast("Thêm mã thất bại", `Mã chứng khoán '${symbol.toUpperCase()}' đã có sẵn trong danh mục`, "error");
+          } else {
+            pushToast("Thêm thành công", `Đã thêm mã chứng khoán '${symbol.toUpperCase()}' vào danh mục`, "success");
+          }
+        }, 10);
 
         pendingScrollSymbolRef.current = symbol.toUpperCase();
         return;
       }
 
-      // ====================== MODE SEARCH BÌNH THƯỜNG (không phải favorite) ======================
+      // ====================== MODE SEARCH BÌNH THƯỜNG ======================
       pendingScrollSymbolRef.current = symbol;
 
       if (exchange === selectedExchange) {
@@ -790,12 +752,27 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
         setSelectedExchange(exchange as "HOSE" | "30" | "UPCOM" | "HNX" | "HNX30");
       }
     },
-    [
-      selectedFavoriteListId,
-      selectedExchange,
-      pushToast,
-      // KHÔNG đưa favoriteLists vào dependency vì ta đang cập nhật state bằng functional update (prev => ...)
-    ],
+    [selectedFavoriteListId, selectedExchange, pushToast],
+  );
+
+  // Xoá một mã khỏi danh mục yêu thích hiện tại
+  const handleRemoveFromFavorite = useCallback(
+    (symbolToRemove: string) => {
+      if (!selectedFavoriteListId) return;
+
+      setFavoriteLists((prev) =>
+        prev.map((list) => {
+          if (list.id !== selectedFavoriteListId) return list;
+          return {
+            ...list,
+            symbols: list.symbols.filter((s) => s.toUpperCase() !== symbolToRemove.toUpperCase()),
+          };
+        }),
+      );
+
+      pushToast("Xoá thành công", `Đã xoá mã chứng khoán '${symbolToRemove}' khỏi danh mục`, "success");
+    },
+    [selectedFavoriteListId, pushToast],
   );
 
   // Khi instruments thay đổi (data đã load) → kiểm tra nếu có mã đang chờ scroll thì nhảy đến
@@ -964,6 +941,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
           activeOrdersMap={activeOrdersMap}
           onOrderClick={handleOrderClick}
           isFavoriteMode={isFavoriteMode}
+          onRemoveFromFavorite={handleRemoveFromFavorite}
         />
       </div>
 

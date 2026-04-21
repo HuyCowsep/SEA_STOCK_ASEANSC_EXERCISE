@@ -626,7 +626,7 @@ _Cập nhật lần cuối: 07/04/2026_
 
 - **Frontend**
   - Tải danh mục theo trạng thái auth:
-    - Không login: đọc từ localStorage key `favoriteLists`.
+    - Không login: đọc từ localStorage với key là `favoriteLists`.
     - Login: gọi API `/api/auth/favorites`.
   - Thêm cờ `hasLoadedFavorites` để chặn việc ghi đè localStorage khi state vừa mount.
   - Đồng bộ save:
@@ -636,7 +636,7 @@ _Cập nhật lần cuối: 07/04/2026_
 #### B) Favorite mode & UI behavior
 
 - Tạo state riêng `isFavoriteMode` (không phụ thuộc hoàn toàn vào `selectedFavoriteListId`).
-- Đưa filter "Danh mục ưa thích" vào cùng `filterGroups.map` để code thống nhất.
+- Đưa filter "Danh mục ưa thích" vào cùng `filterGroups.map`
 - Rule active mới:
   - Nếu `isFavoriteMode = true` => chỉ favorites được active.
   - Filter sàn không được active cùng lúc.
@@ -652,12 +652,11 @@ _Cập nhật lần cuối: 07/04/2026_
 - Khi danh mục rỗng:
   - vẫn render header + subheader đầy đủ,
   - hiện text trạng thái `Chưa có mã trong danh mục`.
-- Điều chỉnh UI khớp cột header/data trong mode danh mục bằng phần bù scrollbar (`padding-right: 6px`).
 
 #### D) Realtime đa sàn cho danh mục
 
 - **Backend (`polling.ts`)**
-  - Bổ sung socket event `subscribe_exchanges`.
+  - Bổ sung code vào socket event `subscribe_exchanges`.
   - Join nhiều room cùng lúc cho 1 client.
   - Emit snapshot gộp từ nhiều room để client có data ban đầu đầy đủ.
 

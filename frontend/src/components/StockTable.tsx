@@ -1,7 +1,7 @@
 //src/components/StockTable.tsx
-import { useState, useEffect, useRef, useMemo, useCallback, useImperativeHandle, forwardRef } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback, useImperativeHandle, forwardRef } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { PushpinOutlined, LockOutlined } from "@ant-design/icons";
+import { PushpinOutlined, LockOutlined, CloseOutlined } from "@ant-design/icons";
 import type { UnitSettings, ColumnVisibility } from "../types/tableConfig";
 import type { Order, OrderInstrumentInfo, OrderSide } from "../types/order";
 import styles from "../scss/StockTable.module.scss";
@@ -90,6 +90,7 @@ interface StockTableProps {
   onOrderClick: (symbol: string, instrumentInfo: OrderInstrumentInfo, side: OrderSide) => void;
   hideSubHeaderWhenEmpty?: boolean;
   isFavoriteMode?: boolean;
+  onRemoveFromFavorite?: (symbol: string) => void;
 }
 
 // Expose ref để Dashboard có thể điều khiển scroll (chế độ trình chiếu + tìm kiếm)
@@ -101,6 +102,24 @@ export interface StockTableHandle {
 const ROW_HEIGHT = 30;
 const NUMBER_FORMATTER_2 = new Intl.NumberFormat("vi-VN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const NUMBER_FORMATTER_0 = new Intl.NumberFormat("vi-VN");
+
+// Button xoá mã CK khỏi danh mục yêu thích, tách button ra khỏi re-render và bọc bằng React.memo
+const RemoveFavoriteBtn = React.memo(({ symbol, onRemove }: { symbol: string; onRemove: (symbol: string) => void }) => {
+  return (
+    <button
+      className={styles.removeFavoriteBtn}
+      onClick={(e) => { //dùng OnClick thay vì OnMouseDown
+        e.preventDefault();
+        e.stopPropagation();
+        onRemove(symbol);
+      }}
+      title="Xoá mã này khỏi danh mục yêu thích"
+      type="button"
+    >
+      <CloseOutlined />
+    </button>
+  );
+});
 
 const StockTable = forwardRef<StockTableHandle, StockTableProps>(
   (
@@ -118,6 +137,7 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
       onOrderClick,
       hideSubHeaderWhenEmpty = false,
       isFavoriteMode = false,
+      onRemoveFromFavorite,
     },
     ref,
   ) => {
@@ -479,9 +499,13 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
           {v.symbol && (
             <div
               className={`${styles.cellSymbol} ${styles.bold} ${sc(stock.closePrice)}`}
+              style={{}}
               title={stock.FullName ? `${stock.symbol} - ${stock.FullName}` : stock.symbol}
             >
-              {stock.symbol}
+              <span>{stock.symbol}</span>
+
+              {/* Dấu X chỉ hiện khi đang ở chế độ Favorite */}
+              {isFavoriteMode && onRemoveFromFavorite && <RemoveFavoriteBtn symbol={stock.symbol} onRemove={onRemoveFromFavorite} />}
             </div>
           )}
 
@@ -837,7 +861,7 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
         )}
 
         {/* TanStack Virtual Container - Scrollable */}
-        <div ref={parentRef} className={`${styles.virtualContainer}${sortAnimating ? ` ${styles.sortFade}` : ""}`} style={{ overflow: "auto" }}>
+        <div ref={parentRef} className={`${styles.virtualContainer}${sortAnimating ? ` ${styles.sortFade}` : ""}`} style={{ overflow: "scroll" }}>
           {!hasData && (
             <div style={{ height: 52, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 13 }}>
               Chưa có mã trong danh mục
