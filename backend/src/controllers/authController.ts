@@ -12,6 +12,7 @@ const OTP_EXPIRE_MS = 5 * 60 * 1000;
 const normalizeString = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
 const normalizePassword = (value: unknown): string => (typeof value === "string" ? value : "");
 const normalizeEmail = (value: unknown): string => normalizeString(value).toLowerCase();
+const normalizeSymbol = (value: unknown): string => (typeof value === "string" ? value.trim().toUpperCase() : "");
 
 const signToken = (userId: string) => {
   const jwtSecret = process.env.JWT_SECRET;
@@ -95,7 +96,9 @@ const getMe = async (req: AuthRequest, res: Response) => {
       return res.status(401).json({ message: "Chưa đăng nhập" });
     }
 
-    const user = await User.findById(userId).select("_id username email fullName nickname phone dateOfBirth cccd status createdAt").lean();
+    const user = await User.findById(userId)
+      .select("_id username email fullName nickname phone dateOfBirth cccd status favoriteLists createdAt")
+      .lean();
     if (!user) {
       return res.status(404).json({ message: "Không tìm thấy người dùng" });
     }
@@ -113,12 +116,65 @@ const getMe = async (req: AuthRequest, res: Response) => {
         dateOfBirth: user.dateOfBirth || "",
         cccd: user.cccd || "",
         status: user.status || "active",
+        favoriteLists: Array.isArray(user.favoriteLists) ? user.favoriteLists : [],
         accountNumber: account?.bankAccount || "",
         createdAt: user.createdAt,
       },
     });
   } catch (error) {
     console.error("[auth.getMe] error:", error);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+};
+
+const getFavoriteLists = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ message: "Chưa đăng nhập" });
+
+    const user = await User.findById(userId).select("favoriteLists").lean();
+    if (!user) return res.status(404).json({ message: "Không tìm thấy người dùng" });
+
+    return res.json({
+      favoriteLists: Array.isArray(user.favoriteLists) ? user.favoriteLists : [],
+    });
+  } catch (error) {
+    console.error("[auth.getFavoriteLists] error:", error);
+    return res.status(500).json({ message: "Lỗi server" });
+  }
+};
+
+const updateFavoriteLists = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ message: "Chưa đăng nhập" });
+
+    const incoming = Array.isArray(req.body?.favoriteLists) ? req.body.favoriteLists : null;
+    if (!incoming) {
+      return res.status(400).json({ message: "favoriteLists không hợp lệ" });
+    }
+
+    const sanitized = incoming
+      .map((item: unknown) => {
+        const raw = item as { id?: unknown; nameList?: unknown; symbols?: unknown };
+        const id = normalizeString(raw.id);
+        const nameList = normalizeString(raw.nameList);
+        const symbols = Array.isArray(raw.symbols) ? raw.symbols.map((s) => normalizeSymbol(s)).filter(Boolean) : [];
+        return { id, nameList, symbols };
+      })
+      .filter((item: { id: string; nameList: string; symbols: string[] }) => item.id && item.nameList);
+
+    const user = await User.findByIdAndUpdate(userId, { $set: { favoriteLists: sanitized } }, { returnDocument: "after" })
+      .select("favoriteLists")
+      .lean();
+
+    if (!user) return res.status(404).json({ message: "Không tìm thấy người dùng" });
+    return res.json({
+      message: "Lưu danh mục yêu thích thành công",
+      favoriteLists: Array.isArray(user.favoriteLists) ? user.favoriteLists : [],
+    });
+  } catch (error) {
+    console.error("[auth.updateFavoriteLists] error:", error);
     return res.status(500).json({ message: "Lỗi server" });
   }
 };
@@ -298,4 +354,4 @@ const changePassword = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export { register, login, getMe, requestPasswordOtp, resetPasswordWithOtp, updateProfile, changePassword };
+export { register, login, getMe, requestPasswordOtp, resetPasswordWithOtp, updateProfile, changePassword, getFavoriteLists, updateFavoriteLists };

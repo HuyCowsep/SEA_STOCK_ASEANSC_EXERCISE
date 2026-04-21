@@ -13,6 +13,7 @@ import { useToast } from "../utils/useToast";
 import ToastContainer from "../utils/ToastContainer";
 import socket from "../websocket/client";
 import { setCurrentExchange } from "../websocket/client";
+import { setCurrentExchanges } from "../websocket/client";
 import { DEFAULT_COLUMN_VISIBILITY } from "../types/tableConfig";
 import type { UnitSettings, ColumnVisibility } from "../types/tableConfig";
 import type { Order, OrderInstrumentInfo, OrderSide, OrderUpdatePayload } from "../types/order";
@@ -70,6 +71,8 @@ interface FavoriteList {
   nameList: string;
   symbols: string[];
 }
+
+const FAVORITE_STORAGE_KEY = "favoriteLists";
 
 // Type cho realtime data từ backend (snapshot hoặc delta)
 interface RealtimeDataResponse {
@@ -130,6 +133,8 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   const [selectedBuyIn, setSelectedBuyIn] = useState<string>("");
   const [favoriteLists, setFavoriteLists] = useState<FavoriteList[]>([]);
   const [selectedFavoriteListId, setSelectedFavoriteListId] = useState<string | null>(null);
+  const [isFavoriteMode, setIsFavoriteMode] = useState(false);
+  const [hasLoadedFavorites, setHasLoadedFavorites] = useState(false);
   //const [buyInSymbols, setBuyInSymbols] = useState<Set<string>>(new Set());
   // Flash từng ô riêng lẻ: key = "symbol:fieldName", value = "up" | "down"
   const [flashingCells, setFlashingCells] = useState<Map<string, FlashCellState>>(new Map());
@@ -146,6 +151,13 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
 
   // ====================== DANH SÁCH TOÀN BỘ MÃ CHO SEARCH ======================
   const [allSymbols, setAllSymbols] = useState<SearchSymbolInfo[]>([]);
+  const allSymbolsExchangeMap = useMemo(() => {
+    const map = new Map<string, "HOSE" | "HNX" | "UPCOM">();
+    allSymbols.forEach((item) => {
+      map.set(item.symbol.toUpperCase(), item.exchange);
+    });
+    return map;
+  }, [allSymbols]);
   const pendingScrollSymbolRef = useRef<string | null>(null); // Mã đang chờ scroll đến sau khi chuyển sàn + data load xong
 
   const [showWarrants, setShowWarrants] = useState(false); // Lọc chứng quyền (CW)
@@ -160,6 +172,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   const instrumentsRef = useRef<Instrument[]>([]);
   const flashTimeoutsRef = useRef<Map<string, number>>(new Map());
   const orderIdsRef = useRef<Set<string>>(new Set());
+  const favoriteSaveTimeoutRef = useRef<number | null>(null);
 
   // activeOrdersMap: chỉ lệnh pending/partial → dùng để highlight bảng giá
   const activeOrdersMap = useMemo(() => {
@@ -202,6 +215,14 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     return () => {
       timers.forEach((timerId) => window.clearTimeout(timerId));
       timers.clear();
+    };
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (favoriteSaveTimeoutRef.current) {
+        window.clearTimeout(favoriteSaveTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -376,9 +397,26 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
 
   // Subscribe vào exchange khi thay đổi sàn
   useEffect(() => {
+    if (isFavoriteMode && selectedFavoriteListId) {
+      const activeList = favoriteLists.find((list) => list.id === selectedFavoriteListId);
+      const exchanges = Array.from(
+        new Set(
+          (activeList?.symbols ?? [])
+            .map((symbol) => allSymbolsExchangeMap.get(symbol.toUpperCase()))
+            .filter((exchange): exchange is "HOSE" | "HNX" | "UPCOM" => !!exchange),
+        ),
+      );
+
+      if (exchanges.length > 0) {
+        setCurrentExchanges(exchanges); // Lưu cho re-subscribe khi reconnect
+        socket.emit("subscribe_exchanges", exchanges);
+        return;
+      }
+    }
+
     setCurrentExchange(selectedExchange); // Lưu cho re-subscribe khi reconnect
     socket.emit("subscribe_exchange", selectedExchange);
-  }, [selectedExchange]);
+  }, [allSymbolsExchangeMap, favoriteLists, isFavoriteMode, selectedExchange, selectedFavoriteListId]);
 
   // Lắng nghe instruments_data từ backend (snapshot hoặc delta)
   useEffect(() => {
@@ -577,12 +615,55 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
   }, [favoriteLists, selectedFavoriteListId]);
 
   const filteredInstruments = useMemo(() => {
-    // Nếu đang ở chế độ Favorite List
-    if (selectedFavoriteSymbols && selectedFavoriteSymbols.size > 0) {
-      const favoriteUpper = new Set(Array.from(selectedFavoriteSymbols).map((s) => s.toUpperCase()));
+    // Nếu đang ở chế độ Favorite List thì luôn render theo danh sách đã lưu
+    if (isFavoriteMode) {
+      if (!selectedFavoriteListId || !selectedFavoriteSymbols || selectedFavoriteSymbols.size === 0) {
+        return [];
+      }
 
-      // Lọc ra những mã đã có data realtime
-      return instruments.filter((stock) => favoriteUpper.has(stock.symbol.toUpperCase()));
+      const instrumentMap = new Map(instruments.map((stock) => [stock.symbol.toUpperCase(), stock]));
+      const activeList = favoriteLists.find((list) => list.id === selectedFavoriteListId);
+      if (!activeList) return [];
+
+      return activeList.symbols.map((symbolRaw) => {
+        const symbol = symbolRaw.toUpperCase();
+        const existing = instrumentMap.get(symbol);
+        if (existing) return existing;
+
+        const inferredExchange = allSymbolsExchangeMap.get(symbol) ?? "HOSE";
+        // Tạo row placeholder để mã vẫn hiện trong bảng dù chưa có realtime snapshot.
+        return {
+          symbol,
+          FullName: "",
+          reference: 0,
+          ceiling: 0,
+          floor: 0,
+          bidPrice3: 0,
+          bidVol3: 0,
+          bidPrice2: 0,
+          bidVol2: 0,
+          bidPrice1: 0,
+          bidVol1: 0,
+          closePrice: 0,
+          closeVol: 0,
+          change: 0,
+          changePercent: 0,
+          offerPrice1: 0,
+          offerVol1: 0,
+          offerPrice2: 0,
+          offerVol2: 0,
+          offerPrice3: 0,
+          offerVol3: 0,
+          totalTrading: 0,
+          high: 0,
+          low: 0,
+          averagePrice: 0,
+          foreignBuy: 0,
+          foreignSell: 0,
+          foreignRemain: 0,
+          exchange: inferredExchange,
+        } as Instrument & { exchange: "HOSE" | "HNX" | "UPCOM" };
+      });
     }
 
     // Mode bình thường (sàn / ngành / warrants / etf)
@@ -594,7 +675,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
       result = result.filter((stock) => ETF_REGEX.test(stock.symbol));
     }
     return result;
-  }, [instruments, selectedFavoriteSymbols, showWarrants, showETF]);
+  }, [allSymbolsExchangeMap, favoriteLists, instruments, isFavoriteMode, selectedFavoriteListId, selectedFavoriteSymbols, showWarrants, showETF]);
 
   // ====================== TẠO DANH MỤC YÊU THÍCH ======================
   const handleFavoriteCreate = useCallback((name: string) => {
@@ -609,6 +690,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     };
     setFavoriteLists((prev) => [...prev, nextList]);
     setSelectedFavoriteListId(newId);
+    setIsFavoriteMode(true);
     return newId;
   }, []);
 
@@ -629,8 +711,26 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
 
   // ====================== XÓA DANH MỤC YÊU THÍCH ======================
   const handleFavoriteDelete = useCallback((id: string) => {
-    setFavoriteLists((prev) => prev.filter((list) => list.id !== id));
-    setSelectedFavoriteListId((prev) => (prev === id ? null : prev));
+    setFavoriteLists((prev) => {
+      const next = prev.filter((list) => list.id !== id);
+      if (next.length === 0) {
+        setSelectedFavoriteListId(null);
+        setIsFavoriteMode(false);
+      } else if (selectedFavoriteListId === id) {
+        setSelectedFavoriteListId(null);
+        setIsFavoriteMode(true);
+      }
+      return next;
+    });
+  }, [selectedFavoriteListId]);
+
+  const handleFavoriteSelect = useCallback((id: string | null) => {
+    setSelectedFavoriteListId(id);
+    setIsFavoriteMode(true);
+  }, []);
+
+  const handleFavoriteModeChange = useCallback((active: boolean) => {
+    setIsFavoriteMode(active);
   }, []);
 
   // ====================== NÚT CHẾ ĐỘ TRÌNH CHIẾU ======================
@@ -649,6 +749,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
 
       // ====================== MODE DANH MỤC YÊU THÍCH ======================
       if (selectedFavoriteListId) {
+        setIsFavoriteMode(true);
         setFavoriteLists((prev) => {
           const updated = prev.map((list) => {
             if (list.id !== selectedFavoriteListId) return list;
@@ -665,12 +766,8 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
               symbols: [...list.symbols, upperSymbol],
             };
 
-            console.log("👉 Updated list:", newList); // ✅ log list vừa sửa
-
             return newList;
           });
-
-          console.log("👉 All favoriteLists sau update:", updated); // ✅ full state
 
           return updated;
         });
@@ -714,6 +811,80 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
       pendingScrollSymbolRef.current = null; // Xóa pending sau khi đã gọi scroll
     }
   }, [instruments]);
+
+  useEffect(() => {
+    const loadFavoriteLists = async () => {
+      setHasLoadedFavorites(false);
+      if (!token) {
+        const raw = localStorage.getItem(FAVORITE_STORAGE_KEY);
+        if (!raw) {
+          setFavoriteLists([]);
+          setSelectedFavoriteListId(null);
+          setIsFavoriteMode(false);
+          setHasLoadedFavorites(true);
+          return;
+        }
+
+        try {
+          const parsed = JSON.parse(raw) as FavoriteList[];
+          if (Array.isArray(parsed)) {
+            setFavoriteLists(parsed);
+            setSelectedFavoriteListId((prev) => (prev && parsed.some((item) => item.id === prev) ? prev : null));
+          } else {
+            setFavoriteLists([]);
+          }
+        } catch {
+          setFavoriteLists([]);
+        }
+        setIsFavoriteMode(false);
+        setHasLoadedFavorites(true);
+        return;
+      }
+
+      try {
+        const res = await axios.get("/api/auth/favorites", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const lists: FavoriteList[] = Array.isArray(res.data?.favoriteLists) ? res.data.favoriteLists : [];
+        setFavoriteLists(lists);
+        setSelectedFavoriteListId((prev) => (prev && lists.some((item) => item.id === prev) ? prev : null));
+      } catch (err) {
+        console.error("Lỗi tải danh mục yêu thích:", err);
+      } finally {
+        setIsFavoriteMode(false);
+        setHasLoadedFavorites(true);
+      }
+    };
+
+    void loadFavoriteLists();
+  }, [token]);
+
+  useEffect(() => {
+    if (!hasLoadedFavorites) return;
+
+    if (!token) {
+      localStorage.setItem(FAVORITE_STORAGE_KEY, JSON.stringify(favoriteLists));
+      return;
+    }
+
+    if (favoriteSaveTimeoutRef.current) {
+      window.clearTimeout(favoriteSaveTimeoutRef.current);
+    }
+
+    favoriteSaveTimeoutRef.current = window.setTimeout(() => {
+      void axios
+        .put(
+          "/api/auth/favorites",
+          { favoriteLists },
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          },
+        )
+        .catch((err) => {
+          console.error("Lỗi lưu danh mục yêu thích:", err);
+        });
+    }, 350);
+  }, [favoriteLists, hasLoadedFavorites, token]);
 
   // Nút Ghim và Bỏ ghim cho từng mã cổ phiếu
   const togglePin = useCallback((symbol: string) => {
@@ -760,7 +931,9 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
           onBuyInChange={setSelectedBuyIn}
           favoriteLists={favoriteLists}
           selectedFavoriteListId={selectedFavoriteListId}
-          onFavoriteSelect={setSelectedFavoriteListId}
+          isFavoriteMode={isFavoriteMode}
+          onFavoriteModeChange={handleFavoriteModeChange}
+          onFavoriteSelect={handleFavoriteSelect}
           onFavoriteCreate={handleFavoriteCreate}
           onFavoriteRename={handleFavoriteRename}
           onFavoriteDelete={handleFavoriteDelete}
@@ -790,6 +963,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
           token={token}
           activeOrdersMap={activeOrdersMap}
           onOrderClick={handleOrderClick}
+          isFavoriteMode={isFavoriteMode}
         />
       </div>
 

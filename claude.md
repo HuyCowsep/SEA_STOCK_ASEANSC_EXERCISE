@@ -177,16 +177,14 @@ backend/src/
 │   └── database.ts           # MongoDB connection
 ├── controllers/
 │   ├── authController.ts     # register, login, forgot password (OTP email)
-│   └── orderController.ts    # [TRỐNG] — cần implement
+│   └── orderController.ts    # placeOrder, getOrders, cancelOrder, getBalance, getHoldings
 ├── models/
 │   ├── User.ts               # username, email, password, otp
-│   ├── Order.ts              # [TRỐNG] — cần implement
-│   └── Price.ts              # [TRỐNG] — không cần dùng
+│   ├── Order.ts              
 ├── routes/
 │   ├── auth.routes.ts        # POST /register, /login, /forgot-password/*
 │   ├── datafeed.ts           # Proxy tới ASEAN REST (instruments, indexsnaps, chart...)
-│   ├── order.routes.ts       # [TRỐNG] — cần implement
-│   └── price.routes.ts       # [TRỐNG] — không cần dùng
+│   ├── order.routes.ts      
 ├── socket/
 │   ├── aseanSocket.ts        # Kết nối WS tới ASEAN (giả lập browser, lấy cookies)
 │   └── polling.ts            # Cache + merge + broadcast delta cho frontend
@@ -586,3 +584,111 @@ _Cập nhật lần cuối: 03/04/2026_
 - Giao diện đã được cập nhật để hiển thị số dư tài khoản một cách trực quan và rõ ràng hơn. Việc này giúp người dùng dễ dàng nắm bắt tình trạng tài chính hiện tại, có thể thấy biến động số dư ngay khi khớp lệnh BUY/SELL
 
 _Cập nhật lần cuối: 07/04/2026_
+
+## 12. Thêm tính năng "Danh mục yêu thích", thêm event subscribe_exchanges để join nhiều room cùng lúc + emit snapshot gộp
+
+### 12.1 Mục tiêu
+
+- Cho phép user tạo nhiều danh mục theo nhu cầu theo dõi riêng (ví dụ: "Đức Huy", "Midcap", "Lướt sóng").
+- Danh mục phải lưu được bền vững:
+  - **Guest**: lưu localStorage.
+  - **User đã login**: lưu MongoDB theo từng tài khoản.
+- Khi xem danh mục, bảng phải hiển thị đúng UX:
+  - click "Danh mục ưa thích" là active ngay,
+  - render header + subheader đầy đủ,
+  - nếu rỗng thì hiện trạng thái rỗng dễ hiểu.
+- Danh mục có thể chứa mã từ nhiều sàn (HOSE/HNX/UPCOM) và vẫn nhận realtime đầy đủ.
+
+### 12.2 Vấn đề đã gặp trong quá trình làm
+
+1. **Guest bị mất dữ liệu sau F5**  
+   Key localStorage còn nhưng value bị thành `[]` do effect lưu chạy sớm trước khi dữ liệu khởi tạo xong.
+
+2. **Mã thêm vào danh mục không hiện đủ trên bảng**  
+   Ban đầu chỉ lọc theo mảng realtime hiện có, nên mã chưa có snapshot đúng room bị "rớt".
+
+3. **UI active bị đè (2 filter cùng đỏ)**  
+   Khi ở favorite mode nhưng state sàn vẫn active, dẫn đến "Danh mục ưa thích" và "HNX30/UPCOM/HNX" sáng cùng lúc.
+
+4. **Thiếu số liệu realtime cho mã cross-sàn trong danh mục**  
+   Socket trước đó chỉ join **1 room** thông qua `subscribe_exchange`, nên danh mục chứa mã đa sàn sẽ thiếu dữ liệu ở các sàn còn lại.
+
+### 12.3 Giải pháp đã triển khai
+
+#### A) Persistence danh mục
+
+- **Backend**
+  - Thêm field `favoriteLists` vào `User` schema.
+  - Thêm API:
+    - `GET /api/auth/favorites`
+    - `PUT /api/auth/favorites`
+  - Validate + sanitize dữ liệu danh mục trước khi lưu (`id`, `nameList`, `symbols`).
+
+- **Frontend**
+  - Tải danh mục theo trạng thái auth:
+    - Không login: đọc từ localStorage key `favoriteLists`.
+    - Login: gọi API `/api/auth/favorites`.
+  - Thêm cờ `hasLoadedFavorites` để chặn việc ghi đè localStorage khi state vừa mount.
+  - Đồng bộ save:
+    - Guest: lưu thẳng localStorage.
+    - Login: debounce nhẹ rồi `PUT /api/auth/favorites`.
+
+#### B) Favorite mode & UI behavior
+
+- Tạo state riêng `isFavoriteMode` (không phụ thuộc hoàn toàn vào `selectedFavoriteListId`).
+- Đưa filter "Danh mục ưa thích" vào cùng `filterGroups.map` để code thống nhất.
+- Rule active mới:
+  - Nếu `isFavoriteMode = true` => chỉ favorites được active.
+  - Filter sàn không được active cùng lúc.
+- Khi click favorites:
+  - bật mode ngay,
+  - dropdown danh mục mở đúng hành vi mong muốn.
+
+#### C) Render bảng danh mục
+
+- Khi danh mục có mã:
+  - render theo thứ tự `symbols` trong list.
+  - nếu mã chưa có dữ liệu realtime ở thời điểm hiện tại, tạo placeholder row để không mất mã.
+- Khi danh mục rỗng:
+  - vẫn render header + subheader đầy đủ,
+  - hiện text trạng thái `Chưa có mã trong danh mục`.
+- Điều chỉnh UI khớp cột header/data trong mode danh mục bằng phần bù scrollbar (`padding-right: 6px`).
+
+#### D) Realtime đa sàn cho danh mục
+
+- **Backend (`polling.ts`)**
+  - Bổ sung socket event `subscribe_exchanges`.
+  - Join nhiều room cùng lúc cho 1 client.
+  - Emit snapshot gộp từ nhiều room để client có data ban đầu đầy đủ.
+
+- **Frontend (`websocket/client.ts`, `Dashboard.tsx`)**
+  - Thêm `setCurrentExchanges()` để lưu trạng thái subscribe đa room khi reconnect.
+  - Ở favorite mode: tự suy ra danh sách sàn từ symbols và emit `subscribe_exchanges`.
+  - Ở mode thường: giữ nguyên `subscribe_exchange`.
+
+### 12.4 File đã thay đổi
+
+- **Backend**
+  - `backend/src/models/User.ts`
+  - `backend/src/controllers/authController.ts`
+  - `backend/src/routes/auth.routes.ts`
+  - `backend/src/socket/polling.ts`
+
+- **Frontend**
+  - `frontend/src/pages/Dashboard.tsx`
+  - `frontend/src/components/FilterToolbar.tsx`
+  - `frontend/src/components/StockTable.tsx`
+  - `frontend/src/scss/StockTable.module.scss`
+  - `frontend/src/websocket/client.ts`
+
+### 12.5 Kết quả sau test
+
+- Login: danh mục lưu MongoDB, F5 không mất.
+- Guest: localStorage giữ đúng dữ liệu sau F5.
+- Danh mục chứa mã đa sàn nhận realtime đúng (không còn thiếu data do giới hạn 1 room).
+- UI active đúng 1 filter tại 1 thời điểm, không còn trạng thái "2 tab cùng đỏ".
+- Trạng thái rỗng của bảng rõ ràng và nhất quán.
+
+---
+
+_Cập nhật lần cuối: 21/04/2026_

@@ -88,6 +88,8 @@ interface StockTableProps {
   token: string | null;
   activeOrdersMap: Map<string, Order>;
   onOrderClick: (symbol: string, instrumentInfo: OrderInstrumentInfo, side: OrderSide) => void;
+  hideSubHeaderWhenEmpty?: boolean;
+  isFavoriteMode?: boolean;
 }
 
 // Expose ref để Dashboard có thể điều khiển scroll (chế độ trình chiếu + tìm kiếm)
@@ -114,6 +116,8 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
       token,
       activeOrdersMap,
       onOrderClick,
+      hideSubHeaderWhenEmpty = false,
+      isFavoriteMode = false,
     },
     ref,
   ) => {
@@ -286,14 +290,7 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
       );
     }
 
-    // Hiển thị trạng thái trống
-    if (!instruments || instruments.length === 0) {
-      return (
-        <div className={styles.container} style={{ padding: "20px", textAlign: "center", color: "#d1d5db" }}>
-          Không có dữ liệu
-        </div>
-      );
-    }
+    const hasData = instruments && instruments.length > 0;
 
     const formatNumber = (value: number | undefined) => {
       if (value === undefined || value === null || value === 0) return "";
@@ -622,7 +619,7 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
     };
 
     return (
-      <div className={styles.tableWrapper}>
+      <div className={`${styles.tableWrapper} ${isFavoriteMode ? styles.favoriteMode : ""}`}>
         {/* Header Container */}
         <div className={styles.headerContainer}>
           <div className={styles.headerGrid} style={{ gridTemplateColumns: gridTemplate }}>
@@ -697,132 +694,132 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
             )}
 
             {/* Sub-headers (row 2) — Bên mua: click sort trên sub-header */}
-            {v.bidPrice3 && (
+            {!hideSubHeaderWhenEmpty && v.bidPrice3 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidPrice3")}>
                 Giá 3{sortIcon("bidPrice3")}
               </div>
             )}
-            {v.bidVol3 && (
+            {!hideSubHeaderWhenEmpty && v.bidVol3 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidVol3")}>
                 KL 3{sortIcon("bidVol3")}
               </div>
             )}
-            {v.bidPrice2 && (
+            {!hideSubHeaderWhenEmpty && v.bidPrice2 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidPrice2")}>
                 Giá 2{sortIcon("bidPrice2")}
               </div>
             )}
-            {v.bidVol2 && (
+            {!hideSubHeaderWhenEmpty && v.bidVol2 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidVol2")}>
                 KL 2{sortIcon("bidVol2")}
               </div>
             )}
-            {v.bidPrice1 && (
+            {!hideSubHeaderWhenEmpty && v.bidPrice1 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidPrice1")}>
                 Giá 1{sortIcon("bidPrice1")}
               </div>
             )}
-            {v.bidVol1 && (
+            {!hideSubHeaderWhenEmpty && v.bidVol1 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("bidVol1")}>
                 KL 1{sortIcon("bidVol1")}
               </div>
             )}
 
             {/* Sub-headers — Khớp lệnh */}
-            {v.matchPrice && (
+            {!hideSubHeaderWhenEmpty && v.matchPrice && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("closePrice")}>
                 Giá{sortIcon("closePrice")}
               </div>
             )}
-            {v.matchVol && (
+            {!hideSubHeaderWhenEmpty && v.matchVol && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("closeVol")}>
                 KL{sortIcon("closeVol")}
               </div>
             )}
-            {v.matchChange && (
+            {!hideSubHeaderWhenEmpty && v.matchChange && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("change")}>
                 +/-{sortIcon("change")}
               </div>
             )}
-            {v.matchChangePercent && (
+            {!hideSubHeaderWhenEmpty && v.matchChangePercent && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("changePercent")}>
                 %{sortIcon("changePercent")}
               </div>
             )}
 
             {/* Sub-headers — Bên bán */}
-            {v.offerPrice1 && (
+            {!hideSubHeaderWhenEmpty && v.offerPrice1 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerPrice1")}>
                 Giá 1{sortIcon("offerPrice1")}
               </div>
             )}
-            {v.offerVol1 && (
+            {!hideSubHeaderWhenEmpty && v.offerVol1 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerVol1")}>
                 KL 1{sortIcon("offerVol1")}
               </div>
             )}
-            {v.offerPrice2 && (
+            {!hideSubHeaderWhenEmpty && v.offerPrice2 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerPrice2")}>
                 Giá 2{sortIcon("offerPrice2")}
               </div>
             )}
-            {v.offerVol2 && (
+            {!hideSubHeaderWhenEmpty && v.offerVol2 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerVol2")}>
                 KL 2{sortIcon("offerVol2")}
               </div>
             )}
-            {v.offerPrice3 && (
+            {!hideSubHeaderWhenEmpty && v.offerPrice3 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerPrice3")}>
                 Giá 3{sortIcon("offerPrice3")}
               </div>
             )}
-            {v.offerVol3 && (
+            {!hideSubHeaderWhenEmpty && v.offerVol3 && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("offerVol3")}>
                 KL 3{sortIcon("offerVol3")}
               </div>
             )}
 
             {/* Sub-headers — Dư */}
-            {v.surplusBid && (
+            {!hideSubHeaderWhenEmpty && v.surplusBid && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("TOTAL_BID_QTTY")}>
                 Mua{sortIcon("TOTAL_BID_QTTY")}
               </div>
             )}
-            {v.surplusOffer && (
+            {!hideSubHeaderWhenEmpty && v.surplusOffer && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("TOTAL_OFFER_QTTY")}>
                 Bán{sortIcon("TOTAL_OFFER_QTTY")}
               </div>
             )}
 
             {/* Sub-headers — Giá */}
-            {v.priceHigh && (
+            {!hideSubHeaderWhenEmpty && v.priceHigh && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("high")}>
                 Cao{sortIcon("high")}
               </div>
             )}
-            {v.priceAvg && (
+            {!hideSubHeaderWhenEmpty && v.priceAvg && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("averagePrice")}>
                 TB{sortIcon("averagePrice")}
               </div>
             )}
-            {v.priceLow && (
+            {!hideSubHeaderWhenEmpty && v.priceLow && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("low")}>
                 Thấp{sortIcon("low")}
               </div>
             )}
 
             {/* Sub-headers — ĐTNN */}
-            {v.foreignBuy && (
+            {!hideSubHeaderWhenEmpty && v.foreignBuy && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("foreignBuy")}>
                 Mua{sortIcon("foreignBuy")}
               </div>
             )}
-            {v.foreignSell && (
+            {!hideSubHeaderWhenEmpty && v.foreignSell && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("foreignSell")}>
                 Bán{sortIcon("foreignSell")}
               </div>
             )}
-            {v.foreignRemain && (
+            {!hideSubHeaderWhenEmpty && v.foreignRemain && (
               <div className={`${styles.subHeader} ${styles.sortable}`} onClick={() => handleSort("foreignRemain")}>
                 Room{sortIcon("foreignRemain")}
               </div>
@@ -841,6 +838,11 @@ const StockTable = forwardRef<StockTableHandle, StockTableProps>(
 
         {/* TanStack Virtual Container - Scrollable */}
         <div ref={parentRef} className={`${styles.virtualContainer}${sortAnimating ? ` ${styles.sortFade}` : ""}`} style={{ overflow: "auto" }}>
+          {!hasData && (
+            <div style={{ height: 52, display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8", fontSize: 13 }}>
+              Chưa có mã trong danh mục
+            </div>
+          )}
           <div
             style={{
               height: `${virtualizer.getTotalSize()}px`,

@@ -11,6 +11,13 @@
   gap: 0;
 }
 
+/* Mode danh mục yêu thích: giữ bù scrollbar để header luôn khớp data */
+.favoriteMode {
+  .headerContainer {
+    padding-right: 6px;
+  }
+}
+
 /* Header Container - Sticky */
 .headerContainer {
   background: #0f172a;

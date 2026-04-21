@@ -46,6 +46,8 @@ interface FilterToolbarProps {
   onBuyInChange: (buyIn: string) => void;
   favoriteLists: FavoriteList[];
   selectedFavoriteListId: string | null;
+  isFavoriteMode: boolean;
+  onFavoriteModeChange: (active: boolean) => void;
   onFavoriteSelect: (id: string | null) => void;
   onFavoriteCreate: (name: string) => string | null;
   onFavoriteRename: (id: string, newName: string) => boolean;
@@ -88,6 +90,8 @@ const FilterToolbar = ({
   onBuyInChange,
   favoriteLists,
   selectedFavoriteListId,
+  isFavoriteMode,
+  onFavoriteModeChange,
   onFavoriteSelect,
   onFavoriteCreate,
   onFavoriteRename,
@@ -145,6 +149,10 @@ const FilterToolbar = ({
 
   // ====================== FILTER GROUPS CONFIG ======================
   const filterGroups: FilterGroup[] = [
+    {
+      key: "favorites",
+      label: selectedFavoriteList?.nameList ?? "Danh mục yêu thích",
+    },
     {
       key: "hose",
       label: activeGroup === "hose" && selectedExchange === "30" ? "VN30" : "HOSE",
@@ -221,11 +229,19 @@ const FilterToolbar = ({
 
   // Main handler - mutual exclusion: chọn 1 cái = reset tất cả cái khác
   const handleFilterSelect = (groupKey: string, subValue?: string) => {
+    if (groupKey === "favorites") {
+      setActiveGroupOverride("favorites");
+      onFavoriteModeChange(true);
+      setHoveredGroup("favorites");
+      return;
+    }
+
     // Reset tất cả Dashboard-level filters
     onWarrantsChange(false);
     onETFChange(false);
     onBuyInChange("");
     onCategoryChange("all");
+    onFavoriteModeChange(false);
 
     // Set active group (dùng override cho các filter không phải exchange thuần)
     // Với hose/hnx/upcom thì reset override → để useMemo tính từ selectedExchange
@@ -360,7 +376,7 @@ const FilterToolbar = ({
         setEditingFavoriteId(null);
         setEditingFavoriteName("");
       }
-      pushToast("Đã xoá danh mục", target ? `Danh mục "${target.nameList}" đã được xoá` : "Danh mục đã được xoá", "info");
+      pushToast("Đã xoá danh mục", target ? `Danh mục "${target.nameList}" đã được xoá` : "Danh mục đã được xoá", "success");
     },
     [editingFavoriteId, favoriteLists, onFavoriteDelete, pushToast],
   );
@@ -368,9 +384,10 @@ const FilterToolbar = ({
   const handleSelectFavorite = useCallback(
     (id: string) => {
       onFavoriteSelect(id);
+      onFavoriteModeChange(true);
       setHoveredGroup(null);
     },
-    [onFavoriteSelect],
+    [onFavoriteModeChange, onFavoriteSelect],
   );
 
   // ====================== HOVER HANDLERS ======================
@@ -505,7 +522,12 @@ const FilterToolbar = ({
   // Khi người dùng chọn 1 mã từ dropdown search → chuyển về sàn tương ứng và bay đến mã đó
   const handleSelectSymbol = (symbol: string, exchange: "HOSE" | "HNX" | "UPCOM") => {
     // Reset override để activeGroup tự tính từ selectedExchange (sàn mới)
-    setActiveGroupOverride(null);
+    setActiveGroupOverride(selectedFavoriteListId ? "favorites" : null);
+    if (!selectedFavoriteListId) {
+      onFavoriteModeChange(false);
+    } else {
+      onFavoriteModeChange(true);
+    }
     onSearchSelect(symbol, exchange);
     setSearchText("");
     setSuggestions([]);
@@ -549,28 +571,20 @@ const FilterToolbar = ({
           </div>
         </div>
 
-        {/* === DANH MỤC ƯA THÍCH === */}
-        <div className={styles.customSelect} onMouseEnter={(e) => handleGroupMouseEnter("favorites", true, e)} onMouseLeave={handleGroupMouseLeave}>
-          <div className={`${styles.customSelectTrigger} ${selectedFavoriteList ? styles.activeExchange : ""}`}>
-            {selectedFavoriteList?.nameList ?? "Danh mục ưa thích"}
-            <span className={styles.arrow}>&#9662;</span>
-          </div>
-        </div>
-
         {/* Tất cả các filter */}
         {filterGroups.map((group) => (
           <div
             key={group.key}
             className={styles.customSelect}
-            onMouseEnter={(e) => handleGroupMouseEnter(group.key, !!group.children, e)}
+            onMouseEnter={(e) => handleGroupMouseEnter(group.key, !!group.children || group.key === "favorites", e)}
             onMouseLeave={handleGroupMouseLeave}
           >
             <div
-              className={`${styles.customSelectTrigger} ${activeGroup === group.key ? styles.activeExchange : ""}`}
+              className={`${styles.customSelectTrigger} ${(group.key === "favorites" ? isFavoriteMode : !isFavoriteMode && activeGroup === group.key) ? styles.activeExchange : ""}`}
               onClick={() => handleFilterSelect(group.key, group.defaultValue)}
             >
               {group.label}
-              {group.children && <span className={styles.arrow}>&#9662;</span>}
+              {(group.children || group.key === "favorites") && <span className={styles.arrow}>&#9662;</span>}
             </div>
           </div>
         ))}
@@ -640,11 +654,9 @@ const FilterToolbar = ({
                 </button>
               </div>
 
-              {/* Section theo prompt */}
               <div className={styles.favoriteSectionTitle}>Danh mục gợi ý</div>
 
               <div className={styles.favoriteList}>
-                {favoriteLists.length === 0 && <div className={styles.favoriteEmpty}>Chưa có danh mục nào</div>}
                 {favoriteLists.map((list) => {
                   const isEditing = editingFavoriteId === list.id;
                   const isSelected = selectedFavoriteListId === list.id;

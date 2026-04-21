@@ -306,15 +306,44 @@ export function startPolling(io: Server) {
     if (latestServerTime) socket.emit("server_time", latestServerTime);
     if (Object.keys(latestChartData).length > 0) socket.emit("chartinday_data", latestChartData);
 
+    const joinExchangeRoomsAndEmitSnapshot = (rooms: unknown[]) => {
+      const validRooms = rooms.filter(
+        (room): room is (typeof VALID_ROOMS)[number] => typeof room === "string" && VALID_ROOMS.includes(room as (typeof VALID_ROOMS)[number]),
+      );
+      if (validRooms.length === 0) return;
+
+      VALID_ROOMS.forEach((ex) => socket.leave(`exchange:${ex}`));
+      validRooms.forEach((room) => {
+        socket.join(`exchange:${room}`);
+      });
+
+      const mergedMap = new Map<string, Record<string, unknown>>();
+      validRooms.forEach((room) => {
+        const snap = buildFullSnapshot(room);
+        if (!snap) return;
+        snap.d.forEach((item) => {
+          const symbol = typeof item?.symbol === "string" ? item.symbol : "";
+          if (!symbol) return;
+          mergedMap.set(symbol, item as Record<string, unknown>);
+        });
+      });
+
+      socket.emit("instruments_data", {
+        s: "ok",
+        d: Array.from(mergedMap.values()),
+        _type: "snapshot",
+      });
+    };
+
     // Client subscribe vào exchange room — gửi FULL SNAPSHOT 1 lần
     socket.on("subscribe_exchange", (exchange: string) => {
-      // đã có log exchange
-      if (!VALID_ROOMS.includes(exchange as (typeof VALID_ROOMS)[number])) return;
-      VALID_ROOMS.forEach((ex) => socket.leave(`exchange:${ex}`)); // Rời tất cả exchange rooms cũ
-      socket.join(`exchange:${exchange}`); // Join room mới, đã có log
-      // Gửi FULL SNAPSHOT ngay lập tức (chỉ lần này)
-      const data = buildFullSnapshot(exchange);
-      if (data) socket.emit("instruments_data", data);
+      joinExchangeRoomsAndEmitSnapshot([exchange]);
+    });
+
+    // Client subscribe nhiều room cùng lúc — dùng cho danh mục yêu thích cross-sàn
+    socket.on("subscribe_exchanges", (exchanges: string[]) => {
+      if (!Array.isArray(exchanges)) return;
+      joinExchangeRoomsAndEmitSnapshot(exchanges);
     });
 
     socket.on("disconnect", () => {
