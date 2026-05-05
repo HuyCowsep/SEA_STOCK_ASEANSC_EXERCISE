@@ -6,6 +6,7 @@ import ComingSoon from "./pages/ComingSoon";
 // import UserGuide from "./pages/UserGuide";
 // import ContactAseanSC from "./pages/ContactAseanSC";
 import { useState } from "react";
+import DashboardOfAccount from "./pages/DashboardOfAccount";
 
 function App() {
   const [theme, setTheme] = useState(localStorage.getItem("theme") || "light");
@@ -46,6 +47,21 @@ function App() {
               />
             }
           />
+
+          <Route
+            path="/tai-khoan"
+            element={
+              <DashboardOfAccount
+                token={token}
+                setToken={setToken}
+                theme={theme}
+                onThemeChange={toggleTheme}
+                onLanguageChange={changeLanguage}
+                currentLanguage={currentLanguage}
+              />
+            }
+          />
+
           {/* <Route path="/terms-service" element={<TermsService />} />
           <Route path="/risk-disclosure" element={<RiskDisclosure />} />
           <Route path="/user-guide" element={<UserGuide />} />

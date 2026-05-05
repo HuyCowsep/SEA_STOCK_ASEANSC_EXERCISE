@@ -645,7 +645,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     return newId;
   }, []);
 
-  // ====================== ĐỔI TÊN DANH MỤC ======================
+  // ====================== ĐỔI TÊN DANH MỤC YÊU THÍCH ======================
   const handleFavoriteRename = useCallback((id: string, newName: string) => {
     const trimmedName = newName.trim();
     if (!trimmedName) return false;
@@ -678,11 +678,13 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     [selectedFavoriteListId],
   );
 
+  // ====================== CHỌN DANH MỤC YÊU THÍCH ======================
   const handleFavoriteSelect = useCallback((id: string | null) => {
     setSelectedFavoriteListId(id);
     setIsFavoriteMode(true);
   }, []);
 
+  // ====================== TOGGLE CHẾ ĐỘ DANH MỤC YÊU THÍCH ======================
   const handleFavoriteModeChange = useCallback((active: boolean) => {
     setIsFavoriteMode(active);
   }, []);
@@ -692,7 +694,7 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
     setPresentationMode((p) => !p);
   }, []);
 
-  // ====================== XỬ LÝ CHỌN MÃ TỪ SEARCH ======================
+  // ====================== XỬ LÝ CHỌN MÃ TỪ SEARCH (CÓ 2 LOẠI) ======================
   const handleSearchSelect = useCallback(
     (symbol: string, exchange: "HOSE" | "HNX" | "UPCOM") => {
       // Reset tất cả filter về mặc định (ngoài favorite)
@@ -706,18 +708,14 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
         setIsFavoriteMode(true);
 
         let isDuplicate = false;
-
         setFavoriteLists((prev) => {
           const updated = prev.map((list) => {
             if (list.id !== selectedFavoriteListId) return list;
-
             const upperSymbol = symbol.toUpperCase().trim();
-
             if (list.symbols.some((s) => s.toUpperCase() === upperSymbol)) {
               isDuplicate = true; // Đánh dấu trùng
               return list;
             }
-
             return {
               ...list,
               symbols: [...list.symbols, upperSymbol],
@@ -726,7 +724,6 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
 
           return updated;
         });
-
         // Chỉ hiện toast sau khi state update xong
         setTimeout(() => {
           if (isDuplicate) {
@@ -735,7 +732,6 @@ const Dashboard = ({ setToken, token, theme, onThemeChange, onLanguageChange, cu
             pushToast("Thêm thành công", `Đã thêm mã chứng khoán '${symbol.toUpperCase()}' vào danh mục`, "success");
           }
         }, 10);
-
         pendingScrollSymbolRef.current = symbol.toUpperCase();
         return;
       }
